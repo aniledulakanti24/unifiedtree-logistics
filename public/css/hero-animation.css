@@ -1,0 +1,714 @@
+/* ==========================================================================
+   UT Logistics — Interactive Fleet Matcher Console (Hero Theater)
+   Shiprocket-Grade Light SaaS Design Language (Clean, Crisp, Trustworthy)
+   Interactive vehicle comparator, live rate calculator, and smooth GSAP transitions.
+   ========================================================================== */
+
+/* --------------------------------------------------------------------------
+   1. HERO COPY & PROOF BADGES (Left Column)
+   -------------------------------------------------------------------------- */
+.heroFleetTag {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 14px;
+  border-radius: 999px;
+  background: #EEF2FF;
+  border: 1px solid #C7D2FE;
+  font-size: 12px;
+  font-weight: 700;
+  color: #27348B;
+  margin-bottom: 16px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.heroFleetTag__pulse {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #27348B;
+  box-shadow: 0 0 8px rgba(39, 52, 139, 0.4);
+  animation: heroBeaconPulse 1.8s infinite ease-in-out;
+}
+
+@keyframes heroBeaconPulse {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(0.65); opacity: 0.45; }
+}
+
+.heroFleetTag__sep {
+  color: #FF5722;
+  font-size: 10px;
+}
+
+.heroFleetTag__sub {
+  color: #4B5563;
+  font-weight: 600;
+}
+
+.heroMainHeading {
+  margin: 0 0 14px;
+  font-size: clamp(32px, 3.8vw, 48px);
+  line-height: 1.14;
+  letter-spacing: -0.03em;
+  font-weight: 800;
+  color: #111827;
+}
+
+.heroGradientText {
+  display: block;
+  background: linear-gradient(135deg, #27348B 0%, #1F2A70 50%, #FF5722 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.heroLeadText {
+  font-size: 16.5px;
+  line-height: 1.6;
+  color: #4B5563;
+  margin: 0 0 20px;
+  max-width: 560px;
+}
+
+/* Micro-Proof Badges Row */
+.heroProofRow {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 10px;
+  margin-bottom: 22px;
+}
+
+@media (max-width: 680px) {
+  .heroProofRow {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+.heroProofItem {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: #FFFFFF;
+  border: 1px solid #E2E8F0;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.03);
+}
+
+.heroProofIcon {
+  font-size: 18px;
+  flex-shrink: 0;
+}
+
+.heroProofItem b {
+  display: block;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: #111827;
+  line-height: 1.2;
+}
+
+.heroProofItem small {
+  display: block;
+  font-size: 10.5px;
+  color: #6B7280;
+  line-height: 1.2;
+}
+
+/* Quick Route Preset Chips */
+.quickRoutePresets {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+}
+
+.presetLabel {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #27348B;
+}
+
+.presetChip {
+  background: #F1F5F9;
+  border: 1px solid #E2E8F0;
+  border-radius: 999px;
+  padding: 5px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #374151;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: inline-flex;
+  align-items: center;
+}
+
+.presetChip:hover {
+  background: #EEF2FF;
+  border-color: #27348B;
+  color: #27348B;
+  transform: translateY(-1px);
+}
+
+.presetChip.is-active {
+  background: #EEF2FF;
+  border-color: #27348B;
+  color: #27348B;
+  font-weight: 700;
+  box-shadow: 0 2px 6px rgba(39, 52, 139, 0.12);
+}
+
+/* Modernized Booking Form */
+.home .bookBar.quickBook {
+  border-radius: 16px;
+  background: #FFFFFF;
+  border: 1px solid #E2E8F0;
+  box-shadow: 0 12px 36px -10px rgba(0, 0, 0, 0.06), 0 0 0 1px rgba(226, 232, 240, 0.8);
+  padding: 20px;
+}
+
+.home .qbFields .btn.btn-primary {
+  background: linear-gradient(135deg, #FF6238 0%, #FF451A 100%);
+  color: #FFFFFF;
+  font-weight: 700;
+  border: none;
+  box-shadow: 0 4px 14px rgba(255, 87, 34, 0.28);
+  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.home .qbFields .btn.btn-primary:hover {
+  transform: translateY(-2px);
+  background: linear-gradient(135deg, #FF7043 0%, #E64A19 100%);
+  box-shadow: 0 6px 20px rgba(255, 87, 34, 0.38);
+}
+
+/* --------------------------------------------------------------------------
+   2. THE DISPATCH CONSOLE / HERO THEATER (Right Column - Shiprocket Dashboard)
+   -------------------------------------------------------------------------- */
+.heroTheater {
+  grid-area: film;
+  min-width: 0;
+  align-self: center;
+  position: relative;
+  background: #FFFFFF;
+  border: 1px solid #E2E8F0;
+  border-radius: 20px;
+  padding: 20px 22px 18px;
+  box-shadow: 0 20px 48px -12px rgba(15, 23, 42, 0.08), 0 0 0 1px rgba(226, 232, 240, 0.8);
+  color: #111827;
+  overflow: hidden;
+  user-select: none;
+}
+
+@media (max-width: 900px) {
+  .heroTheater {
+    margin-top: 18px;
+    padding: 16px;
+  }
+}
+
+/* Hide canvas particle constellation in light mode */
+.heroParticleCanvas {
+  display: none !important;
+}
+
+/* Console Header Bar */
+.htTopBar {
+  position: relative;
+  z-index: 5;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 14px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid #F1F5F9;
+  flex-wrap: wrap;
+}
+
+.htLiveTag {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  background: #ECFDF5;
+  border: 1px solid #A7F3D0;
+  color: #059669;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.htLiveTag__dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #10B981;
+  box-shadow: 0 0 8px rgba(16, 185, 129, 0.4);
+  animation: heroBeaconPulse 1.6s infinite ease-in-out;
+}
+
+.htRouteBadge {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: #334155;
+  background: #F8FAFC;
+  border: 1px solid #E2E8F0;
+  padding: 4px 10px;
+  border-radius: 6px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 600;
+}
+
+.htRouteBadge__pulse {
+  color: #FF5722;
+  font-weight: 700;
+}
+
+/* --------------------------------------------------------------------------
+   3. THE VEHICLE SHOWCASE DOCK (Clean SaaS Studio Stage)
+   -------------------------------------------------------------------------- */
+.htSpotlightDock {
+  position: relative;
+  z-index: 5;
+  background: linear-gradient(180deg, #F8FAFC 0%, #F1F5F9 100%);
+  border: 1px solid #E2E8F0;
+  border-radius: 14px;
+  padding: 16px 18px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 14px;
+  overflow: hidden;
+  transition: border-color 0.3s ease, box-shadow 0.3s ease;
+}
+
+@media (max-width: 580px) {
+  .htSpotlightDock {
+    flex-direction: column;
+    text-align: center;
+    padding: 14px;
+  }
+}
+
+.htSpotlightInfo {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1;
+}
+
+.htChampionBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: #ECFDF5;
+  color: #047857;
+  border: 1px solid #A7F3D0;
+  font-family: var(--font);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  padding: 3px 10px;
+  border-radius: 999px;
+  align-self: flex-start;
+  box-shadow: 0 2px 6px rgba(16, 185, 129, 0.12);
+}
+
+@media (max-width: 580px) {
+  .htChampionBadge {
+    align-self: center;
+  }
+}
+
+.htSpotlightTitle {
+  font-size: 17px;
+  font-weight: 800;
+  color: #111827;
+  margin: 3px 0 0;
+  letter-spacing: -0.01em;
+}
+
+.htSpotlightDesc {
+  font-size: 12px;
+  color: #4B5563;
+  line-height: 1.4;
+  margin: 0;
+}
+
+.htSpotlightMeta {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 11.5px;
+  color: #059669;
+  font-weight: 600;
+  margin-top: 4px;
+}
+
+@media (max-width: 580px) {
+  .htSpotlightMeta {
+    justify-content: center;
+  }
+}
+
+/* Vehicle Studio Stage */
+.htVehicleStage {
+  position: relative;
+  width: 190px;
+  height: 125px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+/* Hide hologram neon rings */
+.htHoloRings, .htHoloCore {
+  display: none !important;
+}
+
+.htStudioGlow {
+  position: absolute;
+  bottom: 8px;
+  width: 140px;
+  height: 18px;
+  border-radius: 50%;
+  background: radial-gradient(ellipse at 50% 50%, rgba(0, 0, 0, 0.12) 0%, transparent 75%);
+  pointer-events: none;
+}
+
+/* Floating Vehicle Image */
+.htVehicleImg {
+  max-width: 100%;
+  max-height: 105px;
+  object-fit: contain;
+  filter: drop-shadow(0 10px 18px rgba(0, 0, 0, 0.12));
+  will-change: transform, opacity;
+  animation: vehicleHoverLevitate 4s ease-in-out infinite alternate;
+}
+
+@keyframes vehicleHoverLevitate {
+  0% { transform: translateY(0px); }
+  50% { transform: translateY(-5px); }
+  100% { transform: translateY(0px); }
+}
+
+/* --------------------------------------------------------------------------
+   4. STRUCTURED MULTI-FLEET COMPARISON MATRIX (Shiprocket Clean Table)
+   -------------------------------------------------------------------------- */
+.htMatrixTable {
+  position: relative;
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  margin-bottom: 14px;
+  overflow: hidden;
+  border-radius: 12px;
+}
+
+.htScanlineBeam {
+  display: none !important;
+}
+
+.htMatrixRow {
+  position: relative;
+  display: grid;
+  grid-template-columns: 130px 1fr auto;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  border-radius: 10px;
+  background: #F8FAFC;
+  border: 1px solid #E2E8F0;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  overflow: hidden;
+}
+
+@media (max-width: 580px) {
+  .htMatrixRow {
+    grid-template-columns: 1fr auto;
+    gap: 8px;
+  }
+  .htMatrixFleet {
+    grid-column: 1 / -1;
+  }
+}
+
+.htMatrixRow:hover {
+  background: #F1F5F9;
+  border-color: #CBD5E1;
+  transform: translateX(2px);
+}
+
+/* Winner Highlight State (UT Logistics Best Match) */
+.htMatrixRow--winner {
+  background: #F0FDF4;
+  border: 1.5px solid #86EFAC;
+  box-shadow: 0 2px 8px rgba(16, 185, 129, 0.08);
+}
+
+.htMatrixRow--winner:hover {
+  background: #DCFCE7;
+  border-color: #4ADE80;
+}
+
+.htMatrixRow--winner .htMatrixFleet span:last-child {
+  color: #047857 !important;
+  font-weight: 800 !important;
+}
+
+.htMatrixFleet {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 700;
+  color: #111827;
+}
+
+.htMatrixFleet__icon {
+  font-size: 16px;
+  flex-shrink: 0;
+}
+
+.htMatrixStatus {
+  font-size: 12px;
+  color: #4B5563;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.htStatusBadge {
+  font-size: 10.5px;
+  font-weight: 700;
+  padding: 3px 8px;
+  border-radius: 6px;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+
+/* Surge Badge */
+.htStatusBadge--surge {
+  background: #FEF3C7;
+  color: #B45309;
+  border: 1px solid #FCD34D;
+}
+
+/* Red Rejection Badge */
+.htStatusBadge--reject {
+  background: #FEE2E2;
+  color: #B91C1C;
+  border: 1px solid #FCA5A5;
+}
+
+/* Orange/Slate Delay Badge */
+.htStatusBadge--delay {
+  background: #F1F5F9;
+  color: #475569;
+  border: 1px solid #CBD5E1;
+}
+
+/* Green Best Match Badge */
+.htStatusBadge--best {
+  background: #10B981;
+  color: #FFFFFF;
+  font-weight: 700;
+  box-shadow: 0 2px 6px rgba(16, 185, 129, 0.25);
+}
+
+.htMatrixFare {
+  text-align: right;
+  font-family: var(--font-mono);
+  font-size: 13.5px;
+  font-weight: 700;
+  color: #111827;
+  white-space: nowrap;
+}
+
+.htMatrixFare--winner {
+  font-size: 15px;
+  font-weight: 800;
+  color: #047857;
+}
+
+/* --------------------------------------------------------------------------
+   5. INTERACTIVE VEHICLE SELECTOR TABS
+   -------------------------------------------------------------------------- */
+.htSelectorWrap {
+  position: relative;
+  z-index: 5;
+  margin-top: 10px;
+  padding-top: 12px;
+  border-top: 1px solid #F1F5F9;
+}
+
+.htSelectorHead {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 11.5px;
+  color: #6B7280;
+  margin-bottom: 8px;
+}
+
+.htSelectorHead b {
+  color: #27348B;
+  font-weight: 700;
+}
+
+.htVehBtnGroup {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+}
+
+@media (max-width: 600px) {
+  .htVehBtnGroup {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+.htVehPill {
+  background: #FFFFFF;
+  border: 1.5px solid #E2E8F0;
+  border-radius: 12px;
+  padding: 8px 6px;
+  color: #111827;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  text-align: center;
+}
+
+.htVehPill__thumb {
+  width: 52px;
+  height: 38px;
+  object-fit: contain;
+  margin-bottom: 2px;
+  filter: drop-shadow(0 2px 5px rgba(0, 0, 0, 0.08));
+  transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.htVehPill:hover .htVehPill__thumb {
+  transform: scale(1.1) translateY(-2px);
+}
+
+.htVehPill.is-active .htVehPill__thumb {
+  transform: scale(1.1);
+  filter: drop-shadow(0 3px 8px rgba(39, 52, 139, 0.15));
+}
+
+.htVehPill:hover {
+  background: #F8FAFC;
+  border-color: #27348B;
+  transform: translateY(-2px);
+}
+
+.htVehPill.is-active {
+  background: #EEF2FF;
+  border-color: #27348B;
+  box-shadow: 0 2px 8px rgba(39, 52, 139, 0.15);
+}
+
+.htVehPill__name {
+  font-size: 11.5px;
+  font-weight: 700;
+  color: #111827;
+  display: block;
+}
+
+.htVehPill__fare {
+  font-size: 13px;
+  font-weight: 800;
+  color: #27348B;
+  display: block;
+}
+
+.htVehPill.is-active .htVehPill__fare {
+  color: #FF5722;
+}
+
+.htVehPill__cap {
+  font-size: 10px;
+  color: #6B7280;
+  display: block;
+}
+
+/* --------------------------------------------------------------------------
+   6. SIMULATION ACTION ROW & PRESETS
+   -------------------------------------------------------------------------- */
+.htActionRow {
+  position: relative;
+  z-index: 5;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  margin-top: 12px;
+  flex-wrap: wrap;
+}
+
+.htSimulateBtn {
+  background: linear-gradient(135deg, #FF6238 0%, #FF451A 100%);
+  color: #FFFFFF;
+  border: none;
+  border-radius: 8px;
+  padding: 8px 18px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  box-shadow: 0 4px 12px rgba(255, 87, 34, 0.28);
+  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.htSimulateBtn:hover {
+  transform: translateY(-1px);
+  background: linear-gradient(135deg, #FF7043 0%, #E64A19 100%);
+  box-shadow: 0 6px 18px rgba(255, 87, 34, 0.38);
+}
+
+.htScenarioPresets {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.htScenarioBtn {
+  background: #F1F5F9;
+  border: 1px solid #E2E8F0;
+  border-radius: 6px;
+  color: #374151;
+  padding: 4px 9px;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.htScenarioBtn:hover {
+  background: #EEF2FF;
+  border-color: #27348B;
+  color: #27348B;
+}

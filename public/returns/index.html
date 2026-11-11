@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Return or exchange an order</title>
+  <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&family=Plus+Jakarta+Sans:wght@500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    :root { --brand: #0B5D45; --accent: #F5B301; --ink: #101C18; --muted: #6B7874; --line: #E4E9E7; --bg: #F6F8F7; --red: #DC2626; --green: #16A34A; }
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: 'Inter', system-ui, sans-serif; background: var(--bg); color: var(--ink); }
+    header { background: var(--brand); color: #fff; padding: 22px 16px; }
+    header .wrap, main { max-width: 620px; margin: 0 auto; }
+    header h1 { margin: 0; font-size: 21px; }
+    header p { margin: 4px 0 0; opacity: .85; font-size: 14px; }
+    main { padding: 16px; display: grid; gap: 14px; }
+    .card { background: #fff; border-radius: 16px; padding: 20px; border: 1px solid var(--line); box-shadow: 0 8px 24px -16px rgba(23,19,13,.25); }
+    h2 { font-size: 17px; margin: 0 0 12px; }
+    label { display: grid; gap: 6px; font-size: 13px; font-weight: 700; color: #47544F; margin-bottom: 12px; }
+    input, select, textarea { width: 100%; border: 1.5px solid var(--line); border-radius: 10px; padding: 12px; font: inherit; color: var(--ink); background: #fff; }
+    input:focus, select:focus, textarea:focus { outline: none; border-color: var(--brand); box-shadow: 0 0 0 3px rgba(200,50,28,.18); }
+    button { border: 0; border-radius: 10px; padding: 13px 18px; background: var(--brand); color: #fff; font: inherit; font-weight: 800; cursor: pointer; width: 100%; }
+    button:disabled { opacity: .5; cursor: not-allowed; }
+    .muted { color: var(--muted); font-size: 14px; }
+    .err { color: var(--red); font-size: 14px; min-height: 0; margin: 8px 0 0; }
+    .err:empty { display: none; }
+    .seg { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 14px; }
+    .seg label { display: flex; align-items: center; gap: 8px; border: 1.5px solid var(--line); border-radius: 12px; padding: 12px; margin: 0; cursor: pointer; }
+    .seg input { width: auto; accent-color: var(--brand); }
+    .seg label:has(input:checked) { border-color: var(--brand); background: #E8F3EF; }
+    .item { display: flex; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid var(--line); font-size: 14px; }
+    .done { text-align: center; }
+    .done .tick { width: 56px; height: 56px; border-radius: 50%; background: var(--accent); display: grid; place-items: center; margin: 0 auto 12px; font-size: 28px; }
+    .hidden { display: none !important; }
+    .row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  </style>
+</head>
+<body>
+  <header><div class="wrap"><h1 id="brand">Return or exchange an order</h1><p id="sub">Enter your order details to get started.</p></div></header>
+  <main>
+    <form class="card" id="find">
+      <h2>Find your order</h2>
+      <div class="row"><label>Order ID<input name="order_id" placeholder="e.g. UT5012" required autocomplete="off"></label>
+        <label>Phone number<input name="phone" inputmode="numeric" maxlength="10" placeholder="10-digit mobile" required></label></div>
+      <button>Find order</button><p class="err" id="findErr" role="alert"></p>
+    </form>
+
+    <div class="card hidden" id="orderCard"></div>
+
+    <form class="card hidden" id="req">
+      <h2>What would you like to do?</h2>
+      <div class="seg"><label><input type="radio" name="type" value="return" checked> Return for refund</label><label id="exOpt"><input type="radio" name="type" value="exchange"> Exchange</label></div>
+      <label>Reason<select name="reason" id="reason"></select></label>
+      <label>Quantity<input name="qty" type="number" min="1" value="1"></label>
+      <label class="hidden" id="newSkuWrap">Exchange for<select name="new_sku" id="newSku"></select></label>
+      <label>Photos <span class="muted" id="photoHint" style="font-weight:600"></span><input type="file" id="photos" accept="image/*" multiple></label>
+      <label>Anything else? (optional)<textarea name="comment" rows="3" maxlength="300"></textarea></label>
+      <button id="submitBtn">Submit request</button><p class="err" id="reqErr" role="alert"></p>
+      <p class="muted" style="margin:10px 0 0">A courier will pick the item up from your delivery address after the store approves. The item is checked at pickup.</p>
+    </form>
+
+    <div class="card done hidden" id="done"><div class="tick">✓</div><h2 id="doneTitle">Request received</h2><p class="muted" id="doneText"></p></div>
+  </main>
+  <script>
+    (function () {
+      var $ = function (s) { return document.querySelector(s); };
+      var esc = function (s) { var d = document.createElement('div'); d.textContent = s == null ? '' : s; return d.innerHTML; };
+      var current = null, creds = null;
+      function post(path, body) {
+        return fetch('/v1/public/returns/' + path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+          .then(function (r) { return r.json().then(function (d) { if (!r.ok) throw new Error(d.message || 'Something went wrong'); return d; }); });
+      }
+      $('#find').phone.addEventListener('input', function () { this.value = this.value.replace(/\D/g, '').slice(0, 10); });
+      $('#find').addEventListener('submit', function (e) {
+        e.preventDefault();
+        $('#findErr').textContent = '';
+        creds = { order_id: e.target.order_id.value.trim(), phone: e.target.phone.value.trim() };
+        post('lookup', creds).then(show).catch(function (err) { $('#findErr').textContent = err.message; });
+      });
+      function show(d) {
+        current = d;
+        if (/^#[0-9a-f]{6}$/i.test(d.store.color)) document.documentElement.style.setProperty('--brand', d.store.color);
+        $('#brand').textContent = d.store.name + ' · Returns';
+        $('#sub').textContent = d.policy.window_days + '-day returns' + (d.policy.allow_exchange ? ' and exchanges' : '') + ' after delivery.';
+        $('#orderCard').innerHTML = '<h2>Order ' + esc(d.order.id) + '</h2>' + d.order.items.map(function (i) { return '<div class="item"><span>' + esc(i.name) + '</span><b>× ' + i.qty + '</b></div>'; }).join('') +
+          '<p class="muted">' + (d.order.delivered_days_ago != null ? (d.order.delivered_days_ago === 0 ? 'Delivered today.' : 'Delivered ' + d.order.delivered_days_ago + ' day' + (d.order.delivered_days_ago === 1 ? '' : 's') + ' ago.') : 'Status: ' + esc(d.order.status.replace(/_/g, ' ').toLowerCase())) + '</p>' +
+          (d.request ? '<p><b>Existing request:</b> ' + esc(d.request.type.toLowerCase()) + ' · ' + esc(d.request.status.replace(/_/g, ' ').toLowerCase()) + '</p>' : '') +
+          (!d.eligible ? '<p class="err">' + esc(d.reason) + '</p>' : '');
+        $('#orderCard').classList.remove('hidden');
+        $('#find').classList.add('hidden');
+        if (!d.eligible) return;
+        $('#reason').innerHTML = d.policy.reasons.map(function (r) { return '<option>' + esc(r) + '</option>'; }).join('');
+        $('#exOpt').classList.toggle('hidden', !d.policy.allow_exchange);
+        $('#newSku').innerHTML = d.exchange_options.map(function (s) { return '<option value="' + esc(s.sku) + '"' + (s.sku === d.order.items[0].sku ? ' selected' : '') + '>' + esc(s.name) + '</option>'; }).join('');
+        var q = $('#req').qty; q.max = d.order.items[0].qty; q.value = d.order.items[0].qty;
+        $('#req').classList.remove('hidden');
+        hint();
+      }
+      function hint() {
+        var need = current.policy.photos_required_for.indexOf($('#reason').value) !== -1;
+        $('#photoHint').textContent = need ? '(required for this reason)' : '(optional)';
+        $('#newSkuWrap').classList.toggle('hidden', $('#req').type.value !== 'exchange');
+      }
+      $('#req').addEventListener('change', hint);
+      $('#req').addEventListener('submit', function (e) {
+        e.preventDefault();
+        var f = e.target;
+        $('#reqErr').textContent = '';
+        $('#submitBtn').disabled = true;
+        post('request', { order_id: creds.order_id, phone: creds.phone, type: f.type.value, reason: f.reason.value, qty: f.qty.value,
+          new_sku: f.type.value === 'exchange' ? f.new_sku.value : '', photos: $('#photos').files.length, comment: f.comment.value })
+          .then(function (r) {
+            $('#req').classList.add('hidden');
+            $('#doneTitle').textContent = r.status === 'APPROVED' ? 'Approved — pickup on its way' : 'Request received';
+            $('#doneText').textContent = 'Reference ' + r.id + '. ' + (r.status === 'APPROVED' ? 'A courier will contact you to collect the item.' : 'The store will review it and you’ll get an update by SMS or email.');
+            $('#done').classList.remove('hidden');
+          })
+          .catch(function (err) { $('#reqErr').textContent = err.message; $('#submitBtn').disabled = false; });
+      });
+    })();
+  </script>
+</body>
+</html>

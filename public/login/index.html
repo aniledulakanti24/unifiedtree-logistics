@@ -1,0 +1,277 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Log in · UT Log</title>
+  <meta name="description" content="Log in to UT Log to book transport, travel, recharges and bill payments from one wallet.">
+  <link rel="icon" href="../assets/favicon.svg" type="image/svg+xml">
+  <meta name="theme-color" content="#0f2925">
+  <script>try { document.documentElement.dataset.theme = localStorage.getItem('ut-theme') || 'light'; } catch (e) {}</script>
+  <script src="../js/token-handoff.js?v=10" data-receive></script>
+  <script>window.UT_SIGNUP_CONFIG = { apiBase: '/v1', appUrl: '/app/' };</script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400..750&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --brand: #0e7c66; --brand-hover: #0b6754; --brand-ink: #0a5f4e; --brand-soft: #e2f3ef;
+      --ink: #15211e; --ink-2: #4c5a56; --ink-3: #66736f; --line: #e1e6e4; --line-strong: #cdd5d2;
+      --surface: #fff; --surface-2: #f1f4f3; --side: #0f2925; --bad: #b8322f; --good: #137a4b; --info: #1d62b5; --info-bg: #e6f0fb;
+      --ring: 0 0 0 3px rgba(14, 124, 102, .16);
+    }
+    @media (prefers-color-scheme: dark) {
+      :root:not([data-theme="light"]) { --ink: #e7eeeb; --ink-2: #b4c2bd; --ink-3: #8fa09a; --line: #27332f; --line-strong: #3a4944; --surface: #161f1c; --surface-2: #1b2522; --brand-soft: #16332d; --brand-ink: #7fd6bf; --info-bg: #17293d; --info: #7db2f0; --side: #0b1412; }
+    }
+    :root[data-theme="dark"] { --ink: #e7eeeb; --ink-2: #b4c2bd; --ink-3: #8fa09a; --line: #27332f; --line-strong: #3a4944; --surface: #161f1c; --surface-2: #1b2522; --brand-soft: #16332d; --brand-ink: #7fd6bf; --info-bg: #17293d; --info: #7db2f0; --side: #0b1412; }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; }
+    body { font: 400 14px/1.5 'Inter', 'Segoe UI', system-ui, sans-serif; color: var(--ink); background: var(--surface); -webkit-font-smoothing: antialiased; }
+    button, input { font: inherit; color: inherit; }
+    a { color: var(--brand-ink); }
+    .hidden { display: none !important; }
+
+    .login { display: grid; grid-template-columns: 1fr 1fr; min-height: 100vh; }
+    /* Left: brand panel */
+    .login-art { position: relative; overflow: hidden; display: flex; flex-direction: column; justify-content: space-between; gap: 32px; padding: 40px; background: var(--side); color: #dfeae7; }
+    .login-art .net { position: absolute; right: -150px; bottom: -170px; width: 620px; max-width: 110%; opacity: .32; pointer-events: none; }
+    .brand { position: relative; display: flex; align-items: center; gap: 10px; color: #fff; font-weight: 650; font-size: 15px; text-decoration: none; }
+    .brand img { width: 32px; height: 32px; }
+    .art-copy { position: relative; }
+    .art-copy h1 { margin: 0; max-width: 480px; font-size: 34px; line-height: 1.15; font-weight: 700; letter-spacing: -.025em; color: #fff; }
+    .art-copy p { max-width: 440px; margin: 12px 0 0; color: #b5c9c3; }
+    .art-points { position: relative; display: grid; gap: 10px; margin: 22px 0 0; padding: 0; list-style: none; max-width: 440px; }
+    .art-points li { display: flex; align-items: center; gap: 10px; color: #dfeae7; font-size: 13.5px; }
+    .art-points svg { width: 18px; height: 18px; flex: none; color: #7fd6bf; }
+    .art-foot { position: relative; font-size: 12.5px; color: #8aa39c; }
+
+    /* Right: form */
+    .login-form { display: flex; flex-direction: column; justify-content: center; align-items: center; padding: 32px 24px; background: var(--surface); }
+    .login-box { width: min(420px, 100%); }
+    .login-box > h2 { margin: 0; font-size: 21px; font-weight: 680; letter-spacing: -.015em; }
+    .lead { margin: 4px 0 18px; color: var(--ink-2); font-size: 13px; }
+    #authWidget h3 { margin: 0 0 4px; font-size: 15px; font-weight: 650; }
+    .muted { margin: 0 0 12px; color: var(--ink-2); font-size: 13px; }
+    .phone-field { display: flex; align-items: center; height: 42px; border: 1px solid var(--line-strong); border-radius: 8px; background: var(--surface); overflow: hidden; }
+    .phone-field:focus-within, input:focus { border-color: var(--brand); box-shadow: var(--ring); outline: 0; }
+    .phone-field .cc { padding: 0 10px; height: 100%; display: grid; place-items: center; border-inline-end: 1px solid var(--line); background: var(--surface-2); color: var(--ink-2); font-weight: 550; }
+    .phone-field input { flex: 1; min-width: 0; height: 100%; border: 0; padding: 0 12px; background: none; font-size: 15px; letter-spacing: .02em; }
+    .phone-field input:focus { box-shadow: none; }
+    .field { display: grid; gap: 6px; margin-bottom: 12px; font-size: 13px; font-weight: 550; color: var(--ink-2); }
+    .field input { height: 40px; padding: 0 12px; border: 1px solid var(--line-strong); border-radius: 8px; background: var(--surface); font-size: 14px; font-weight: 400; color: var(--ink); }
+    .btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; height: 40px; padding: 0 14px; border: 1px solid var(--line-strong); border-radius: 8px; background: var(--surface); font-weight: 600; font-size: 14px; cursor: pointer; }
+    .btn-primary { background: var(--brand); border-color: var(--brand); color: #fff; }
+    .btn-primary:hover:not(:disabled) { background: var(--brand-hover); }
+    .btn:disabled { opacity: .5; cursor: not-allowed; }
+    .btn-block { width: 100%; margin-top: 12px; }
+    .btn.is-loading { opacity: .7; pointer-events: none; }
+    .divider { display: flex; align-items: center; gap: 10px; margin: 16px 0 10px; color: var(--ink-3); font-size: 12px; }
+    .divider::before, .divider::after { content: ''; flex: 1; height: 1px; background: var(--line); }
+    .social-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .social-btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; height: 40px; border: 1px solid var(--line-strong); border-radius: 8px; background: var(--surface); font-weight: 550; cursor: pointer; }
+    .social-btn:hover:not(:disabled) { background: var(--surface-2); }
+    .social-btn:disabled { opacity: .55; cursor: not-allowed; }
+    .social-btn img { width: 18px; height: 18px; }
+    .social-btn.back { width: 100%; margin-top: 10px; }
+    .link, .link-btn { color: var(--brand-ink); font-weight: 600; cursor: pointer; background: none; border: 0; padding: 0; }
+    .link-btn { display: block; margin: 10px auto 0; font-size: 13px; }
+    .otp-row { display: grid; grid-template-columns: repeat(6, 1fr); gap: 8px; margin: 4px 0 8px; }
+    .otp-digit { height: 48px; text-align: center; font-size: 20px; font-weight: 650; border: 1px solid var(--line-strong); border-radius: 8px; background: var(--surface); }
+    .resend { margin: 4px 0; font-size: 12.5px; color: var(--ink-3); }
+    .error { margin: 6px 0 0; color: var(--bad); font-size: 12.5px; min-height: 0; }
+    .error:empty, .success:empty { display: none; }
+    .success { margin: 6px 0 0; color: var(--good); font-size: 12.5px; }
+    .fine { margin: 12px 0 0; font-size: 12px; color: var(--ink-3); text-align: center; }
+    .dev-hint { margin: 12px 0 0; padding: 8px 10px; border-radius: 8px; background: var(--brand-soft); color: var(--brand-ink); font-size: 12.5px; }
+
+    /* Demo accounts, like the CRM role cards */
+    .demo-head { display: flex; align-items: center; gap: 10px; margin: 22px 0 10px; color: var(--ink-3); font-size: 12px; }
+    .demo-head::before, .demo-head::after { content: ''; flex: 1; height: 1px; background: var(--line); }
+    .role-card { display: flex; align-items: center; gap: 12px; width: 100%; padding: 10px 12px; margin-bottom: 8px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); text-align: start; cursor: pointer; transition: border-color .15s, background .15s; }
+    .role-card:hover { border-color: var(--brand); background: var(--brand-soft); }
+    .role-card:disabled { opacity: .6; cursor: wait; }
+    .role-av { width: 36px; height: 36px; border-radius: 50%; display: grid; place-items: center; flex: none; color: #fff; font-weight: 650; font-size: 13px; }
+    .role-card .grow { flex: 1; min-width: 0; }
+    .role-card b { font-weight: 650; } .role-card b small { font-weight: 400; color: var(--ink-3); }
+    .role-card .grow > span { display: block; color: var(--ink-2); font-size: 12.5px; line-height: 1.4; }
+    .role-card .arrow { color: var(--ink-3); flex: none; }
+    .notice { margin-top: 14px; padding: 10px 12px; border-radius: 8px; background: var(--info-bg); color: var(--info); font-size: 12.5px; }
+    #demoErr { margin-top: 6px; }
+
+    @media (max-width: 900px) {
+      .login { grid-template-columns: 1fr; }
+      .login-art { padding: 22px 20px 26px; gap: 14px; }
+      .login-art .net, .art-points, .art-foot { display: none; }
+      .art-copy h1 { font-size: 24px; }
+      .art-copy p { font-size: 13px; }
+      .login-form { justify-content: flex-start; padding: 24px 16px 40px; }
+    }
+    @media (prefers-reduced-motion: no-preference) { .login-box { animation: rise .35s ease-out both; } @keyframes rise { from { opacity: 0; transform: translateY(8px); } } }
+  </style>
+</head>
+<body>
+<main class="login">
+  <section class="login-art" aria-label="About UT Log">
+    <svg class="net" viewBox="0 0 640 640" aria-hidden="true" fill="none" stroke="#7fd6bf" stroke-width="1.400">
+      <path d="M90 520 250 400 400 450 560 300M250 400 300 250 470 200 600 90M300 250 140 210 60 90M400 450 470 600M470 200 560 300M140 210 250 400" stroke-dasharray="2 7"/>
+      <g fill="#0f2925" stroke-width="1.600"><circle cx="90" cy="520" r="7"/><circle cx="250" cy="400" r="9"/><circle cx="400" cy="450" r="7"/><circle cx="560" cy="300" r="9"/><circle cx="300" cy="250" r="8"/><circle cx="470" cy="200" r="7"/><circle cx="600" cy="90" r="6"/><circle cx="140" cy="210" r="7"/><circle cx="60" cy="90" r="6"/><circle cx="470" cy="600" r="6"/></g>
+      <g stroke-width="1.800"><path d="M236 392h20v12h-20zM256 396h6l3 4v4h-9z"/><circle cx="241" cy="406" r="2.500"/><circle cx="259" cy="406" r="2.500"/></g>
+      <g stroke-width="1.800"><path d="M552 296l6-4 8 3-5 4zM556 296v8l6 3"/></g>
+      <g stroke-width="1.800"><path d="M292 244l8-4 8 4v8l-8 4-8-4zM292 244l8 4 8-4M300 248v8"/></g>
+    </svg>
+    <a class="brand" href="/"><img src="../assets/favicon.svg" alt="" width="32" height="32">UT Log</a>
+    <div class="art-copy">
+      <h1>Every shipment, ticket and bill on one wallet.</h1>
+      <p>Compare couriers, vehicles, trucks, flights and billers side by side, then book and pay in one place. We connect you to the providers; they do the work.</p>
+      <ul class="art-points">
+        <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="m8 12 3 3 5-6"/></svg>Vehicle, courier, logistics and international transport</li>
+        <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="m8 12 3 3 5-6"/></svg>Travel, stays, recharges and 40+ bill types</li>
+        <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="m8 12 3 3 5-6"/></svg>Pay by wallet, UPI, card, EMI or netbanking</li>
+      </ul>
+    </div>
+    <div class="art-foot">Sandbox workspace with sample data</div>
+  </section>
+
+  <section class="login-form">
+    <div class="login-box">
+      <h2>Log in</h2>
+      <p class="lead">Use your mobile number. New here? The same step creates your account.</p>
+
+      <!-- Sign-in widget: state machine lives in js/signup-form.js -->
+      <div id="signup"><div id="authWidget">
+        <div id="mobile-section">
+          <div class="phone-field">
+            <span class="cc">+91</span>
+            <input id="mobile" type="tel" inputmode="numeric" autocomplete="tel-national" placeholder="Mobile number" maxlength="10" aria-label="Mobile number" aria-describedby="mobile-error">
+          </div>
+          <p class="error" id="mobile-error" role="alert"></p>
+          <p class="error" id="request-message" role="alert"></p>
+          <p class="success" id="request-success"></p>
+          <button id="feature-request-otp-btn" class="btn btn-primary btn-block" type="button" disabled>Get OTP</button>
+          <div class="divider"><span>or continue with</span></div>
+          <div class="social-row">
+            <button id="others-login-btn" class="social-btn" type="button"><img src="../assets/icons/mail.svg" alt="">Email</button>
+            <button id="google-login-btn" class="social-btn google" type="button" disabled title="Google sign-in is not connected yet"><img src="../assets/icons/google-g.svg" alt="">Google</button>
+          </div>
+        </div>
+
+        <div id="otp-section" class="hidden">
+          <h3>Verify your phone number</h3>
+          <p class="muted">Code sent to +91 <b id="user-mobile-number"></b> <span id="edit-mobile" role="button" tabindex="0" class="link">Edit</span></p>
+          <div class="otp-row">
+            <input class="otp-digit" type="text" inputmode="numeric" maxlength="1" autocomplete="one-time-code" aria-label="Digit 1">
+            <input class="otp-digit" type="text" inputmode="numeric" maxlength="1" aria-label="Digit 2">
+            <input class="otp-digit" type="text" inputmode="numeric" maxlength="1" aria-label="Digit 3">
+            <input class="otp-digit" type="text" inputmode="numeric" maxlength="1" aria-label="Digit 4">
+            <input class="otp-digit" type="text" inputmode="numeric" maxlength="1" aria-label="Digit 5">
+            <input class="otp-digit" type="text" inputmode="numeric" maxlength="1" aria-label="Digit 6">
+          </div>
+          <p class="resend" id="resend-text"></p>
+          <p class="error" id="otp-error" role="alert"></p>
+          <p class="success" id="otp-message"></p>
+          <button id="feature-verify-otp-btn" class="btn btn-primary btn-block" type="button" disabled>Verify and log in</button>
+        </div>
+
+        <div id="profile-section" class="hidden">
+          <h3>Tell us about you</h3>
+          <label class="field"><span>Full name</span><input id="name" type="text" autocomplete="name"></label>
+          <label class="field"><span>Email</span><input id="email" type="email" autocomplete="email"></label>
+          <p class="error" id="profile-error" role="alert"></p>
+          <button id="update-profile-btn" class="btn btn-primary btn-block" type="button">Continue</button>
+        </div>
+
+        <div id="email-section" class="hidden">
+          <h3>Log in or sign up with email</h3>
+          <div id="email-check-step">
+            <label class="field"><span>Email</span><input id="email-input" type="email" autocomplete="email"></label>
+            <p class="error" id="email-error" role="alert"></p>
+            <button id="check-email-btn" class="btn btn-primary btn-block" type="button">Continue</button>
+          </div>
+          <div id="email-login-step" class="hidden">
+            <p class="muted">Welcome back, <b class="email-display"></b></p>
+            <label class="field"><span>Password</span><input id="login-password" type="password" autocomplete="current-password"></label>
+            <p class="error" id="login-error" role="alert"></p>
+            <button id="email-login-btn" class="btn btn-primary btn-block" type="button">Log in</button>
+            <button id="forgot-password-btn" class="link-btn" type="button">Forgot password?</button>
+          </div>
+          <div id="email-signup-step" class="hidden">
+            <p class="muted">Create an account for <b class="email-display"></b></p>
+            <label class="field"><span>Password (at least 8 characters)</span><input id="signup-password" type="password" autocomplete="new-password"></label>
+            <label class="field"><span>Confirm password</span><input id="signup-password-confirm" type="password" autocomplete="new-password"></label>
+            <p class="error" id="signup-error" role="alert"></p>
+            <button id="email-signup-btn" class="btn btn-primary btn-block" type="button">Create account</button>
+          </div>
+          <div id="forgot-password-step" class="hidden">
+            <p class="muted">We will send a reset code to <b class="email-display"></b></p>
+            <p class="error" id="fp-error" role="alert"></p>
+            <button id="send-otp-btn" class="btn btn-primary btn-block" type="button">Send code</button>
+          </div>
+          <div id="forgot-otp-step" class="hidden">
+            <p class="muted">Enter the code sent to <b id="fp-otp-email-display"></b></p>
+            <label class="field"><span>Code</span><input id="fp-otp" type="number" inputmode="numeric"></label>
+            <p class="error" id="fp-otp-error" role="alert"></p>
+            <p class="success" id="fp-otp-message"></p>
+            <button id="verify-fp-otp-btn" class="btn btn-primary btn-block" type="button">Verify code</button>
+          </div>
+          <div id="reset-password-step" class="hidden">
+            <p class="muted">Set a new password for <b id="reset-email-display"></b></p>
+            <label class="field"><span>New password</span><input id="new-password" type="password" autocomplete="new-password"></label>
+            <label class="field"><span>Confirm new password</span><input id="new-password-confirm" type="password" autocomplete="new-password"></label>
+            <p class="error" id="reset-error" role="alert"></p>
+            <button id="reset-password-btn" class="btn btn-primary btn-block" type="button">Reset password</button>
+          </div>
+          <button id="back-to-mobile-btn" class="social-btn back" type="button">← Back to mobile login</button>
+        </div>
+        <p class="dev-hint hidden" id="dev-hint"></p>
+      </div></div>
+
+      <div id="demo">
+        <div class="demo-head">or explore a demo account</div>
+        <button class="role-card" type="button" data-demo="personal"><span class="role-av" style="background:#a23b72">AR</span><span class="grow"><b>Personal <small>· Asha Rao</small></b><span>Book rides and parcels, travel, recharges and bills.</span></span><svg class="arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></button>
+        <button class="role-card" type="button" data-demo="business"><span class="role-av" style="background:#0e7c66">VM</span><span class="grow"><b>Business <small>· Vikram Mehta, Mehta Traders</small></b><span>Freight and couriers, GST invoices, WhatsApp updates, team access.</span></span><svg class="arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></button>
+        <button class="role-card" type="button" data-demo="logistics"><span class="role-av" style="background:#2a5f8f">SK</span><span class="grow"><b>Logistics team <small>· Sana Khan, Swift Movers</small></b><span>Trucks, bulk courier booking, Control Tower and partner holidays.</span></span><svg class="arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></button>
+        <p class="error" id="demoErr" role="alert"></p>
+      </div>
+      <p class="notice">Sandbox: bookings and payments are simulated, and demo accounts hold sample data. By continuing you agree to the <a href="/#terms">Terms</a> and <a href="/#privacy">Privacy Policy</a>.</p>
+    </div>
+  </section>
+</main>
+<script src="../js/signup-form.js?v=36"></script>
+<script>
+// Demo accounts: one click signs in with a sample profile. Works only where the server exposes
+// test codes (development and the sandbox); in production the server never returns them.
+(function () {
+  'use strict';
+  var DEMOS = {
+    personal: { mobile: '9000000101', profile: { account_type: 'personal', name: 'Asha Rao', email: 'asha.demo@utlog.in' } },
+    business: { mobile: '9000000102', profile: { account_type: 'business', name: 'Vikram Mehta', email: 'vikram.demo@utlog.in', company: 'Mehta Traders' } },
+    logistics: { mobile: '9000000103', profile: { account_type: 'business', name: 'Sana Khan', email: 'sana.demo@utlog.in', company: 'Swift Movers' }, land: '/app/#/logistics' },
+  };
+  var err = document.getElementById('demoErr');
+  function post(path, body, token) {
+    return fetch('/v1' + path, { method: 'POST', headers: Object.assign({ 'Content-Type': 'application/json' }, token ? { Authorization: 'Bearer ' + token } : {}), body: JSON.stringify(body) })
+      .then(function (r) { return r.json().catch(function () { return {}; }).then(function (d) { if (!r.ok) { var e = new Error(d.message || 'Request failed'); e.status = r.status; throw e; } return d; }); });
+  }
+  document.getElementById('demo').addEventListener('click', function (e) {
+    var card = e.target.closest('[data-demo]');
+    if (!card) return;
+    var demo = DEMOS[card.dataset.demo];
+    var cards = document.querySelectorAll('[data-demo]');
+    cards.forEach(function (c) { c.disabled = true; });
+    err.textContent = '';
+    post('/auth/onboard/request', { mobile: demo.mobile })
+      .then(function (r) {
+        if (!r.dev_otp) throw new Error('Demo accounts are only available in the sandbox. Log in with your mobile number instead.');
+        return post('/auth/onboard/validate', { mobile: demo.mobile, otp: r.dev_otp });
+      })
+      .then(function (v) { return post('/hub/profile', demo.profile, v.token).then(function () { return v.token; }); })
+      .then(function (token) {
+        try { localStorage.setItem('ut-account', demo.profile.account_type); localStorage.setItem('ut-tour', '"done"'); } catch (x) {}
+        window.utHandoffRedirect(token, demo.land || '/app/');
+      })
+      .catch(function (x) { err.textContent = x.status === 429 ? 'Too many tries. Please wait a minute and try again.' : x.message; cards.forEach(function (c) { c.disabled = false; }); });
+  });
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,234 @@
+/* ==========================================================================
+   UT Logistics — Why UT Logistics & Workflow (Shiprocket Clean SaaS Style)
+   High-converting comparison grid & 4-step logistics workflow
+   ========================================================================== */
+
+.whySection {
+  padding: 88px 0;
+  background: #FFFFFF;
+  border-top: 1px solid #EAEFF5;
+  border-bottom: 1px solid #EAEFF5;
+  color: #111827;
+}
+
+.whyHeader {
+  max-width: 740px;
+  margin: 0 auto 48px;
+  text-align: center;
+}
+
+.whyHeader .kicker {
+  color: #27348B;
+  font-size: 13px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  margin-bottom: 8px;
+}
+
+.whyHeader h2 {
+  font-family: var(--font-display);
+  font-size: clamp(28px, 3.4vw, 40px);
+  font-weight: 800;
+  line-height: 1.18;
+  color: #111827;
+  margin: 0 0 14px;
+}
+
+.whyHeader h2 span {
+  color: #27348B;
+}
+
+.whyHeader p {
+  font-size: 16.5px;
+  color: #4B5563;
+  line-height: 1.55;
+  margin: 0;
+}
+
+/* 2-Column Side-by-Side Comparison Grid */
+.dilemmaGrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 28px;
+  margin-bottom: 48px;
+}
+
+@media (max-width: 820px) {
+  .dilemmaGrid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.dilemmaCard {
+  border-radius: 16px;
+  padding: 32px;
+  border: 1px solid #E2E8F0;
+  background: #FFFFFF;
+  box-shadow: 0 4px 20px -2px rgba(16, 24, 40, 0.05);
+  display: flex;
+  flex-direction: column;
+  transition: transform 0.25s ease, box-shadow 0.25s ease;
+}
+
+.dilemmaCard:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 12px 30px -4px rgba(16, 24, 40, 0.08);
+}
+
+.dilemmaCard--problem {
+  border-color: #FECACA;
+  background: #FFFBFB;
+}
+
+.dilemmaCard--solution {
+  border: 1.5px solid #C7D2FE;
+  background: #FFFFFF;
+  box-shadow: 0 8px 30px -4px rgba(39, 52, 139, 0.08);
+}
+
+.dilemmaBadge {
+  display: inline-block;
+  font-size: 11.5px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 4px 12px;
+  border-radius: 999px;
+  margin-bottom: 14px;
+  width: fit-content;
+}
+
+.dilemmaBadge--problem {
+  background: #FEE2E2;
+  border: 1px solid #FCA5A5;
+  color: #B91C1C;
+}
+
+.dilemmaBadge--solution {
+  background: #EEF2FF;
+  border: 1px solid #C7D2FE;
+  color: #27348B;
+}
+
+.dilemmaCard h3 {
+  font-family: var(--font-display);
+  font-size: 20px;
+  font-weight: 800;
+  color: #111827;
+  margin: 0 0 16px;
+}
+
+.dilemmaList {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.dilemmaItem {
+  display: flex;
+  gap: 12px;
+  font-size: 14.5px;
+  color: #4B5563;
+  line-height: 1.5;
+}
+
+.dilemmaItem b {
+  color: #111827;
+}
+
+.dilemmaIcon {
+  flex-shrink: 0;
+  font-weight: 800;
+  font-size: 14px;
+  margin-top: 2px;
+}
+
+.dilemmaCard--problem .dilemmaIcon {
+  color: #DC2626;
+}
+
+.dilemmaCard--solution .dilemmaIcon {
+  color: #059669;
+}
+
+.dilemmaSummary {
+  margin-top: auto;
+  padding: 12px 16px;
+  border-radius: 8px;
+  font-size: 13.5px;
+  font-weight: 600;
+}
+
+.dilemmaCard--problem .dilemmaSummary {
+  background: #FEF2F2;
+  border: 1px solid #FECACA;
+  color: #991B1B;
+}
+
+.dilemmaCard--solution .dilemmaSummary {
+  background: #ECFDF5;
+  border: 1px solid #A7F3D0;
+  color: #065F46;
+}
+
+/* 4-Step Process Bar */
+.workflowGrid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 18px;
+}
+
+@media (max-width: 900px) {
+  .workflowGrid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 520px) {
+  .workflowGrid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.workflowStep {
+  background: #FFFFFF;
+  border: 1px solid #E2E8F0;
+  border-radius: 12px;
+  padding: 22px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.03);
+  transition: all 0.25s ease;
+}
+
+.workflowStep:hover {
+  border-color: #27348B;
+  box-shadow: 0 8px 24px rgba(39, 52, 139, 0.08);
+  transform: translateY(-2px);
+}
+
+.workflowStep__num {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 700;
+  color: #27348B;
+  margin-bottom: 8px;
+  display: block;
+}
+
+.workflowStep h4 {
+  font-family: var(--font-display);
+  font-size: 16px;
+  font-weight: 800;
+  color: #111827;
+  margin: 0 0 8px;
+}
+
+.workflowStep p {
+  font-size: 13.5px;
+  color: #64748B;
+  line-height: 1.5;
+  margin: 0;
+}

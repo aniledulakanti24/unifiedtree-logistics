@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>UT Log — Pricing</title>
+  <meta name="description" content="Pay-as-you-go shipping rates. Check your price for any lane before you sign up.">
+  <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&family=Plus+Jakarta+Sans:wght@500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/css/styles.css?v=9">
+  <style>
+    .priceHero { padding: 72px 0 40px; background: linear-gradient(180deg, #fff, var(--bg-light)); }
+    .calc { display: grid; grid-template-columns: minmax(0, 380px) minmax(0, 1fr); gap: 24px; align-items: start; }
+    .calc form { padding: 24px; display: grid; gap: 12px; }
+    .calc label { display: grid; gap: 6px; font-weight: 700; font-size: 13px; color: var(--ink-2); }
+    .calc input, .calc select { width: 100%; min-width: 0; border: 1.5px solid var(--line); border-radius: 12px; padding: 12px 14px; font: inherit; background: #fff; }
+    .calc input:focus, .calc select:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 3px rgba(200,50,28,.18); }
+    .pair { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 10px; }
+    .quote { padding: 24px; }
+    .q { display: grid; grid-template-columns: 1fr auto auto; gap: 16px; align-items: center; padding: 14px 0; border-bottom: 1px solid var(--line); }
+    .q:first-of-type { border-top: 1px solid var(--line); }
+    .q b.price { font-size: 20px; }
+    .best { background: var(--accent); color: var(--ink); font-size: 11px; font-weight: 800; border-radius: 6px; padding: 2px 7px; margin-left: 8px; }
+    .incl { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; margin-top: 32px; }
+    .incl .card { padding: 22px; }
+    .incl h3 { font-size: 18px; margin-bottom: 6px; }
+    .err { color: var(--error); }
+    @media (max-width: 860px) { .calc, .incl { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body>
+  <header class="site-header" style="position:sticky">
+    <div class="container site-header__inner">
+      <a href="/" class="brand"><img src="/assets/logo.svg" alt="UT Log" width="124" height="32"></a>
+      <nav class="bookNav" aria-label="Main"><a href="/book/" target="_blank" rel="noopener">Book a delivery</a><a href="/track/" target="_blank" rel="noopener">Track</a><a href="/pricing/" target="_blank" rel="noopener" aria-current="page">Pricing</a><a href="/partners/" target="_blank" rel="noopener">Partner with us</a></nav>
+      <span style="flex:1"></span>
+      <a href="/#signup" class="btn btn-ghost">Seller login</a>
+    </div>
+  </header>
+  <main>
+    <section class="priceHero"><div class="container">
+      <p class="eyebrow">Pricing</p>
+      <h1 style="font-size:clamp(36px,5vw,56px)">Pay per shipment.<br><span class="grad">No subscription.</span></h1>
+      <p class="lead">Check the real rate for any lane. Prices include GST. Recharge your wallet from ₹500.</p>
+    </div></section>
+    <section class="section" style="padding-top:24px"><div class="container">
+      <div class="calc">
+        <form class="card" id="f">
+          <div class="pair"><label>Pickup pincode<input name="pickup" inputmode="numeric" maxlength="6" placeholder="6-digit pincode" required></label>
+            <label>Delivery pincode<input name="delivery" inputmode="numeric" maxlength="6" placeholder="6-digit pincode" required></label></div>
+          <div class="pair"><label>Weight (kg)<input name="weight" inputmode="decimal" placeholder="Enter weight" required></label>
+            <label>Payment<select name="cod"><option value="0">Prepaid</option><option value="1">Cash on delivery</option></select></label></div>
+          <label>Order value (₹)<input name="value" inputmode="numeric" placeholder="Optional"></label>
+          <button class="btn btn-primary btn-block">Get rates</button>
+          <p class="muted" style="margin:0;font-size:13px">Chargeable weight is the higher of dead weight and L×B×H ÷ 5000.</p>
+        </form>
+        <div class="card quote" id="out"><p class="muted">Enter a lane to see rates.</p></div>
+      </div>
+      <div class="incl">
+        <div class="card"><h3>Included free</h3><p class="muted">Courier rules, bulk tools, labels and manifests, branded tracking page, returns portal, COD reconciliation, team roles, API & webhooks.</p></div>
+        <div class="card"><h3>Optional add-ons</h3><p class="muted">COD confirmation ₹1/message · Delivery Boost ₹12 per failed delivery · Early COD 0.5% · WhatsApp updates ₹0.90/message.</p></div>
+        <div class="card"><h3>No lock-in</h3><p class="muted">No setup fee or minimum volume. Unused wallet balance stays yours.</p></div>
+      </div>
+    </div></section>
+  </main>
+  <script>
+    (function () {
+      var f = document.getElementById('f'), out = document.getElementById('out');
+      var esc = function (s) { var d = document.createElement('div'); d.textContent = s; return d.innerHTML; };
+      ['pickup', 'delivery'].forEach(function (n) { f[n].addEventListener('input', function () { this.value = this.value.replace(/\D/g, '').slice(0, 6); }); });
+      f.addEventListener('submit', function (e) {
+        e.preventDefault();
+        var q = new URLSearchParams({ pickup: f.pickup.value, delivery: f.delivery.value, weight: f.weight.value, cod: f.cod.value, value: f.value.value });
+        var token = ''; try { token = localStorage.getItem('ut_token') || ''; } catch (err) {}
+        out.innerHTML = '<p class="muted">Checking couriers…</p>';
+        fetch('/v1/public/rates?' + q, { headers: token ? { Authorization: 'Bearer ' + token } : {} }).then(function (r) { return r.json().then(function (d) { return { ok: r.ok, d: d }; }); }).then(function (x) {
+          if (!x.ok) { out.innerHTML = '<p class="err">' + esc(x.d.message) + '</p>'; return; }
+          if (x.d.locked) { // only a count came back; the rows behind the blur are placeholders
+            var row = '<div class="q"><span><b>Courier partner</b></span><span class="muted">0 days</span><b class="price">₹00</b></div>';
+            out.innerHTML = '<div class="lockedRes"><div class="lockedRes__blur" aria-hidden="true"><h3 style="margin-bottom:12px">Couriers for this route</h3>' + row + row + row + row + row + '</div>' +
+              '<div class="lockedRes__card"><div class="lockedRes__icon"><svg width=\"20\" height=\"20\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.8\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><rect x=\"5\" y=\"11\" width=\"14\" height=\"9\" rx=\"2\"/><path d=\"M8 11V8a4 4 0 0 1 8 0v3\"/></svg></div><h3>Sign in to see the rates</h3><p>We found ' + x.d.count + ' courier' + (x.d.count === 1 ? '' : 's') + ' for this route. Sign in to see prices and delivery times.</p>' +
+              '<a class="btn btn-primary" href="/?next=' + encodeURIComponent('/pricing/?' + q) + '#signup">Sign in to view</a></div></div>';
+            return;
+          }
+          var cheapest = Math.min.apply(null, x.d.data.map(function (c) { return c.rate; }));
+          out.innerHTML = '<h3 style="margin-bottom:4px">' + x.d.data.length + ' couriers · ' + esc(x.d.zone) + ' zone</h3><p class="muted" style="margin-bottom:12px">Rates incl. GST' + (f.cod.value === '1' ? ' and COD charge' : '') + '</p>' +
+            x.d.data.slice().sort(function (a, b) { return a.rate - b.rate; }).map(function (c) {
+              return '<div class="q"><span><b>' + esc(c.courier_name) + '</b>' + (c.rate === cheapest ? '<span class="best">Cheapest</span>' : '') + '</span><span class="muted">' + c.etd_days + ' days</span><b class="price">₹' + c.rate.toLocaleString('en-IN') + '</b></div>';
+            }).join('') + '<p style="margin-top:16px"><a class="btn btn-primary" href="/#signup">Start shipping at these rates</a></p>';
+        }).catch(function () { out.innerHTML = '<p class="err">Could not load rates. Try again.</p>'; });
+      });
+      // Back from signing in: put the route back and show its rates.
+      var back = new URLSearchParams(location.search);
+      if (back.get('pickup')) {
+        ['pickup', 'delivery', 'weight', 'cod', 'value'].forEach(function (k) { if (back.get(k)) f[k].value = back.get(k); });
+        f.requestSubmit();
+      } else out.innerHTML = '<p class="muted">Enter both pincodes and the weight to check rates.</p>';
+    })();
+  </script>
+</body>
+</html>

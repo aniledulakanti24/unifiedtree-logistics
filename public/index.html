@@ -1,0 +1,765 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>UT Logistics — Compare &amp; Choose the Best Vehicle for Your Package</title>
+  <meta name="description" content="Tired of switching between Porter, Rapido, and couriers? Enter Point A to Point B, compare all delivery apps, courier services, and vehicles in one place, and book the perfect vehicle for your package in minutes.">
+  <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&family=Plus+Jakarta+Sans:wght@500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/styles.css?v=35">
+  <link rel="stylesheet" href="css/home.css?v=35">
+  <link rel="stylesheet" href="css/scenario.css?v=35">
+  <link rel="stylesheet" href="css/hero-animation.css?v=35">
+  <link rel="stylesheet" href="css/cinematic-footer.css?v=35">
+  <!-- GSAP 3.12.5 & ScrollTrigger Core -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/ScrollTrigger.min.js"></script>
+  <!-- Must run before analytics: picks up a cross-app session hand-off. -->
+  <script src="js/token-handoff.js?v=10" data-receive></script>
+  <script>window.UT_SIGNUP_CONFIG = { apiBase: '/v1', appUrl: '/app/' };</script>
+</head>
+<body class="home">
+
+<!-- ============ HEADER ============ -->
+<header class="site-header" id="siteHeader">
+  <div class="container site-header__inner">
+    <a href="/" class="brand" aria-label="UT Log home"><img src="assets/logo.svg" alt="UT Log" width="124" height="32"></a>
+    <nav id="site-navigation" class="main-navigation" aria-label="Main">
+      <ul class="menu" id="main_menu">
+        <li class="menu-item-has-children">
+          <a class="menu-link" href="/book/" target="_blank" rel="noopener">Send</a>
+          <div class="sub-menu mega">
+            <a href="/book/?service=local" target="_blank" rel="noopener"><img src="assets/vehicles/bike.svg" alt=""><span><b>Local</b><small>Two-wheelers to trailers, within your city</small></span></a>
+            <a href="/book/?service=national" target="_blank" rel="noopener"><img src="assets/vehicles/parcel.svg" alt=""><span><b>Across India</b><small>Courier parcels, door to door</small></span></a>
+            <a href="/book/?service=national&amp;segment=b2b" target="_blank" rel="noopener"><img src="assets/vehicles/truck19.svg" alt=""><span><b>Business freight</b><small>Part truck, full truck and air cargo</small></span></a>
+            <a href="/book/?service=international" target="_blank" rel="noopener"><img src="assets/vehicles/plane.svg" alt=""><span><b>International</b><small>Express, air and sea freight</small></span></a>
+          </div>
+        </li>
+        <li><a class="menu-link" href="/track/" target="_blank" rel="noopener">Track</a></li>
+        <li class="menu-item-has-children">
+          <a class="menu-link" href="/#sellers" target="_blank" rel="noopener">For sellers</a>
+          <div class="sub-menu">
+            <a href="/#sellers" target="_blank" rel="noopener">Seller tools</a>
+            <a href="/#developers" target="_blank" rel="noopener">API &amp; webhooks</a>
+            <a href="/returns/" target="_blank" rel="noopener">Buyer returns portal</a>
+          </div>
+        </li>
+        <li><a class="menu-link" href="/pricing/" target="_blank" rel="noopener">Pricing</a></li>
+        <li><a class="menu-link" href="/partners/" target="_blank" rel="noopener">Drive with us</a></li>
+      </ul>
+    </nav>
+    <div class="appLogins">
+      <a href="/login/" class="btn btn-ghost loginCta" data-login>Log in</a>
+      <a href="#signup" class="btn btn-primary" style="padding: 9px 18px; font-size: 13.5px; border-radius: 8px;">Get Started Free</a>
+    </div>
+    <button class="MobileNavController" type="button" aria-label="Open menu" aria-expanded="false"><span></span><span></span><span></span></button>
+  </div>
+  <div class="pageRoute" aria-hidden="true"><div class="pageRoute__fill"></div><div class="pageRoute__parcel"></div></div>
+</header>
+
+<main>
+<!-- ============ HERO ============ -->
+<section class="hero" id="book">
+  <div class="container">
+    <div class="hero__grid">
+      <!-- Left Column: Compelling Copy, Value Proof Badges & Modern Booking Dock -->
+      <div class="hero__copy">
+        <div class="heroFleetTag">
+          <span class="heroFleetTag__pulse"></span>
+          <span class="heroFleetTag__text">Multi-Fleet Logistics Platform</span>
+          <span class="heroFleetTag__sep">✦</span>
+          <span class="heroFleetTag__sub">Bengaluru &amp; 24,000+ Pin Codes</span>
+        </div>
+
+        <h1 class="heroMainHeading">
+          India's Leading Multi-Fleet Logistics Engine.
+          <span class="heroGradientText">Compare Porter, Rapido &amp; Couriers in One Tap.</span>
+        </h1>
+
+        <p class="heroLeadText">
+          Stop jumping between 4 different delivery apps or paying unpredictable surge fares. UT Logistics unifies independent tempos, 2-wheelers, and national express couriers — matching your package weight to the guaranteed lowest rate and nearest verified vehicle in seconds.
+        </p>
+
+        <!-- Micro-Proof Value Matrix -->
+        <div class="heroProofRow">
+          <div class="heroProofItem">
+            <span class="heroProofIcon">⚡</span>
+            <div><b>4-Min Match</b><small>Live Fleet Radar</small></div>
+          </div>
+          <div class="heroProofItem">
+            <span class="heroProofIcon">🛡️</span>
+            <div><b>Verified Drivers</b><small>100% Background Check</small></div>
+          </div>
+          <div class="heroProofItem">
+            <span class="heroProofIcon">💰</span>
+            <div><b>Zero Surge</b><small>Guaranteed Base Rates</small></div>
+          </div>
+          <div class="heroProofItem">
+            <span class="heroProofIcon">📦</span>
+            <div><b>1kg to 4,000kg</b><small>Bikes to 14ft Trucks</small></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Right Column: Interactive Fleet Matcher Console (Hero Theater) -->
+      <div class="heroTheater" id="heroTheater" aria-label="Interactive Fleet Matcher Console">
+        <!-- Canvas Ambient Particle Starfield -->
+        <canvas class="heroParticleCanvas" id="heroParticleCanvas"></canvas>
+
+        <!-- Top Status & Telemetry HUD Bar -->
+        <div class="htTopBar">
+          <div class="htLiveTag"><span class="htLiveTag__dot"></span> Live Fleet Radar Active</div>
+          <div class="htRouteBadge" id="htRouteBadge">
+            <span id="htRouteText">📍 Koramangala ➔ 🏁 Whitefield · 📦 18 kg</span>
+            <span class="htRouteBadge__pulse">· 16.4 km (28 min)</span>
+          </div>
+        </div>
+
+        <!-- Grounded Vehicle Spotlight Showcase -->
+        <div class="htSpotlightDock">
+          <div class="htSpotlightInfo">
+            <span class="htChampionBadge" id="htChampionBadge">★ RECOMMENDED BEST FIT</span>
+            <h3 class="htSpotlightTitle" id="htSpotlightTitle">Tata Ace (Mini Truck)</h3>
+            <p class="htSpotlightDesc" id="htSpotlightDesc">Optimal for 18 kg · 5.5 × 4.8 ft load bed · Instant driver dispatch.</p>
+            <div class="htSpotlightMeta" id="htSpotlightMeta">⚡ 4 mins away · 5.5ft Load Bed · Verified Driver</div>
+          </div>
+          <div class="htVehicleStage">
+            <div class="htStudioGlow"></div>
+            <img class="htVehicleImg" id="htMainVehicleImg" src="assets/vehicles3d/mini.jpg" alt="Tata Ace Mini Truck">
+          </div>
+        </div>
+
+        <!-- Clean Multi-Fleet Comparison Matrix -->
+        <div class="htMatrixTable" id="htMatrixTable">
+          <div class="htScanlineBeam" id="htScanlineBeam"></div>
+          <!-- Row 1: Porter -->
+          <div class="htMatrixRow htMatrixRow--porter">
+            <div class="htMatrixFleet">
+              <span class="htMatrixFleet__icon">🚚</span>
+              <span>Porter App</span>
+            </div>
+            <div class="htMatrixStatus">
+              <span class="htStatusBadge htStatusBadge--surge" id="htPorterBadge">1.8x Surge ⚠️</span>
+              <span id="htPorterSub">Heavy surge detected · 35m wait</span>
+            </div>
+            <div class="htMatrixFare" id="htPorterFare">₹480</div>
+          </div>
+
+          <!-- Row 2: Rapido -->
+          <div class="htMatrixRow htMatrixRow--rapido">
+            <div class="htMatrixFleet">
+              <span class="htMatrixFleet__icon">🏍️</span>
+              <span>Rapido Bike</span>
+            </div>
+            <div class="htMatrixStatus">
+              <span class="htStatusBadge htStatusBadge--reject" id="htRapidoBadge">Rejected ✕</span>
+              <span id="htRapidoSub">Exceeds 5kg bike limit (18kg parcel)</span>
+            </div>
+            <div class="htMatrixFare" id="htRapidoFare">--</div>
+          </div>
+
+          <!-- Row 3: Regional Courier -->
+          <div class="htMatrixRow htMatrixRow--courier">
+            <div class="htMatrixFleet">
+              <span class="htMatrixFleet__icon">📦</span>
+              <span>Courier Fleets</span>
+            </div>
+            <div class="htMatrixStatus">
+              <span class="htStatusBadge htStatusBadge--delay" id="htCourierBadge">2-3 Days ⏳</span>
+              <span id="htCourierSub">No same-day or live GPS tracking</span>
+            </div>
+            <div class="htMatrixFare" id="htCourierFare">₹240</div>
+          </div>
+
+          <!-- Row 4: UT Logistics Winner -->
+          <div class="htMatrixRow htMatrixRow--winner">
+            <div class="htMatrixFleet">
+              <span class="htMatrixFleet__icon">🟢</span>
+              <span>UT Logistics</span>
+            </div>
+            <div class="htMatrixStatus">
+              <span class="htStatusBadge htStatusBadge--best" id="htUtBadge">BEST MATCH ★</span>
+              <span id="htUtSub">Tata Ace · Saves ₹170 vs Porter surge</span>
+            </div>
+            <div class="htMatrixFare htMatrixFare--winner" id="htUtFare">₹310</div>
+          </div>
+        </div>
+
+        <!-- Vehicle Selector Tabs -->
+        <div class="htSelectorWrap">
+          <div class="htSelectorHead">
+            <span>Select Vehicle to Compare Fares:</span>
+            <b>Instant Payload Match</b>
+          </div>
+          <div class="htVehBtnGroup">
+            <button type="button" class="htVehPill" data-veh="bike">
+              <img class="htVehPill__thumb" src="assets/vehicles3d/bike.jpg" alt="2-Wheeler">
+              <span class="htVehPill__name">2-Wheeler</span>
+              <span class="htVehPill__fare">₹85</span>
+              <span class="htVehPill__cap">Up to 5 kg</span>
+            </button>
+            <button type="button" class="htVehPill" data-veh="auto">
+              <img class="htVehPill__thumb" src="assets/vehicles3d/auto.jpg" alt="3-Wheeler Auto">
+              <span class="htVehPill__name">3-Wheeler</span>
+              <span class="htVehPill__fare">₹160</span>
+              <span class="htVehPill__cap">Up to 25 kg</span>
+            </button>
+            <button type="button" class="htVehPill is-active" data-veh="mini">
+              <img class="htVehPill__thumb" src="assets/vehicles3d/mini.jpg" alt="Tata Ace">
+              <span class="htVehPill__name">Tata Ace</span>
+              <span class="htVehPill__fare">₹310</span>
+              <span class="htVehPill__cap">Up to 750 kg</span>
+            </button>
+            <button type="button" class="htVehPill" data-veh="truck14">
+              <img class="htVehPill__thumb" src="assets/vehicles3d/truck14.jpg" alt="14ft Truck">
+              <span class="htVehPill__name">14ft Truck</span>
+              <span class="htVehPill__fare">₹1,250</span>
+              <span class="htVehPill__cap">Up to 4,000 kg</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Simulation Action Row & Scenarios -->
+        <div class="htActionRow">
+          <button type="button" class="htSimulateBtn" id="htSimulateBtn">
+            <span>⚡ Compare All Fleets Live</span>
+          </button>
+          <div class="htScenarioPresets">
+            <button type="button" class="htScenarioBtn" data-kg="18">📦 18kg Box</button>
+            <button type="button" class="htScenarioBtn" data-kg="3">📄 3kg Doc</button>
+            <button type="button" class="htScenarioBtn" data-kg="1200">🛋️ 1,200kg</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Left Column Part 2: Quick Booking Form (#quickBook) with Preset Chips -->
+      <form class="bookBar quickBook" id="quickBook" autocomplete="off" novalidate>
+        <div class="quickRoutePresets">
+          <span class="presetLabel">Quick test:</span>
+          <button type="button" class="presetChip is-active" data-a="Koramangala" data-b="Whitefield" data-kg="18">📍 Koramangala ➔ Whitefield (18kg)</button>
+          <button type="button" class="presetChip" data-a="Indiranagar" data-b="Electronic City" data-kg="5">📍 Indiranagar ➔ Electronic City (5kg)</button>
+          <button type="button" class="presetChip" data-a="HSR Layout" data-b="Yelahanka" data-kg="850">📍 HSR ➔ Yelahanka (850kg)</button>
+        </div>
+
+        <div class="bookBar__top">
+          <div class="segToggle" role="radiogroup" aria-label="Where it's going">
+            <label><input type="radio" name="dest" value="india" checked><span>Within India</span></label>
+            <label><input type="radio" name="dest" value="abroad"><span>Abroad</span></label>
+          </div>
+          <div class="segToggle" role="radiogroup" aria-label="Who is sending">
+            <label><input type="radio" name="hb_segment" value="b2c" checked><span>Personal</span></label>
+            <label><input type="radio" name="hb_segment" value="b2b"><span>Business</span></label>
+          </div>
+        </div>
+        <div class="qbFields">
+          <label class="qbPlace qbPlace--a">Pickup (Point A)<input name="from_place" list="areaList" placeholder="Koramangala, Bengaluru" value="Koramangala"></label>
+          <label class="qbPlace qbPlace--b" data-dest="india">Drop (Point B)<input name="to_place" list="areaList" placeholder="Whitefield, Bengaluru" value="Whitefield"></label>
+          <label class="qbPlace qbPlace--b" data-dest="abroad" hidden>Drop country<select name="country" required><option value="">Select country</option></select></label>
+          <label class="qbWeight">Weight (kg)<input name="weight" inputmode="decimal" placeholder="e.g. 18" value="18"></label>
+          <button class="btn btn-primary">Check Rates &amp; Find Best Match →</button>
+        </div>
+        <datalist id="areaList"></datalist>
+        <p class="error" id="quickBookError" role="alert"></p>
+      </form>
+    </div>
+    <div class="heroResult" id="heroResult" aria-live="polite" hidden></div>
+  </div>
+</section>
+
+<!-- ============ TRUST STATS & FLEET PARTNERS (SHIPROCKET STYLE) ============ -->
+<section class="trustBarSection">
+  <div class="container">
+    <div class="trustStatsGrid">
+      <div class="trustStatCard">
+        <span class="trustStatNum">24,000+</span>
+        <span class="trustStatLabel">Pin Codes Served Across India</span>
+      </div>
+      <div class="trustStatCard">
+        <span class="trustStatNum">25+</span>
+        <span class="trustStatLabel">Courier &amp; Fleet Partners Integrated</span>
+      </div>
+      <div class="trustStatCard">
+        <span class="trustStatNum">₹20/kg</span>
+        <span class="trustStatLabel">Lowest Guaranteed Starting Rates</span>
+      </div>
+      <div class="trustStatCard">
+        <span class="trustStatNum">99.4%</span>
+        <span class="trustStatLabel">On-Time Driver Dispatch &amp; GPS</span>
+      </div>
+    </div>
+    <div class="partnerTickerWrap">
+      <p class="partnerTickerLead">Compare real-time rates across India's top delivery fleets:</p>
+      <div class="partnerTickerBadges">
+        <span class="partnerBadgeChip">🚚 Porter</span>
+        <span class="partnerBadgeChip">🏍️ Rapido</span>
+        <span class="partnerBadgeChip">📦 Delhivery</span>
+        <span class="partnerBadgeChip">⚡ Blue Dart</span>
+        <span class="partnerBadgeChip">📫 DTDC</span>
+        <span class="partnerBadgeChip">🏍️ Shadowfax</span>
+        <span class="partnerBadgeChip">🚀 Xpressbees</span>
+        <span class="partnerBadgeChip">🛒 Ekart</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ WHY UT LOGISTICS (THE SCENARIO COMPARISON) ============ -->
+<section class="whySection" id="why-ut">
+  <div class="container">
+    <div class="whyHeader">
+      <p class="kicker">Why UT Logistics</p>
+      <h2>One search. <span>The right vehicle for your shipment.</span></h2>
+      <p>Moving goods across the city shouldn't mean juggling 4 different apps, dealing with unexpected surge pricing, or guessing vehicle payload limits.</p>
+    </div>
+
+    <!-- 2-Column Dilemma vs Solution -->
+    <div class="dilemmaGrid">
+      <!-- The Fragmented Approach -->
+      <div class="dilemmaCard dilemmaCard--problem">
+        <span class="dilemmaBadge dilemmaBadge--problem">The Fragmented Approach</span>
+        <h3>Juggling Multiple Delivery Apps</h3>
+        <ul class="dilemmaList">
+          <li class="dilemmaItem">
+            <span class="dilemmaIcon">✕</span>
+            <span><b>App jumping:</b> Constantly checking Porter, Rapido, couriers, and local contacts across separate browser tabs and mobile apps.</span>
+          </li>
+          <li class="dilemmaItem">
+            <span class="dilemmaIcon">✕</span>
+            <span><b>Weight rejections:</b> Booking a 2-wheeler only for the rider to cancel on arrival because the parcel exceeds 5 kg.</span>
+          </li>
+          <li class="dilemmaItem">
+            <span class="dilemmaIcon">✕</span>
+            <span><b>Surge pricing surprises:</b> Paying 1.8x to 2.5x surge during peak hours without knowing if a cheaper courier was nearby.</span>
+          </li>
+          <li class="dilemmaItem">
+            <span class="dilemmaIcon">✕</span>
+            <span><b>Cash bargaining:</b> Local tempo drivers calling to demand arbitrary return charges or cash fuel surcharges.</span>
+          </li>
+        </ul>
+        <div class="dilemmaSummary">
+          Outcome: ~45 minutes wasted, uncertain arrival, and higher delivery costs.
+        </div>
+      </div>
+
+      <!-- The UT Logistics Approach -->
+      <div class="dilemmaCard dilemmaCard--solution">
+        <span class="dilemmaBadge dilemmaBadge--solution">The UT Logistics Approach</span>
+        <h3>Single Search. Instant Vehicle Match.</h3>
+        <ul class="dilemmaList">
+          <li class="dilemmaItem">
+            <span class="dilemmaIcon">✓</span>
+            <span><b>Unified network:</b> Enter pickup and drop once to query independent tempos, bikes, and courier networks simultaneously.</span>
+          </li>
+          <li class="dilemmaItem">
+            <span class="dilemmaIcon">✓</span>
+            <span><b>Smart payload matching:</b> Automatic matching maps your exact package weight to the smallest economical vehicle.</span>
+          </li>
+          <li class="dilemmaItem">
+            <span class="dilemmaIcon">✓</span>
+            <span><b>Guaranteed transparent fares:</b> Locked upfront rates with direct fleet pricing and zero hidden surge penalties.</span>
+          </li>
+          <li class="dilemmaItem">
+            <span class="dilemmaIcon">✓</span>
+            <span><b>Secure dispatch:</b> Assigned verified driver within 90 seconds, live GPS tracking, and two-party OTP verification.</span>
+          </li>
+        </ul>
+        <div class="dilemmaSummary">
+          Outcome: Booking confirmed in under 2 minutes with up to 35% cost savings.
+        </div>
+      </div>
+    </div>
+
+    <!-- 4-Step Process -->
+    <div class="workflowGrid">
+      <div class="workflowStep">
+        <span class="workflowStep__num">Step 01</span>
+        <h4>Specify Route &amp; Weight</h4>
+        <p>Enter Point A (pickup), Point B (destination), and estimated package weight in our unified search bar.</p>
+      </div>
+      <div class="workflowStep">
+        <span class="workflowStep__num">Step 02</span>
+        <h4>Simultaneous Fleet Scan</h4>
+        <p>Our routing engine queries available tempos, bike couriers, and freight networks within your radius.</p>
+      </div>
+      <div class="workflowStep">
+        <span class="workflowStep__num">Step 03</span>
+        <h4>Payload Match &amp; Compare</h4>
+        <p>View vehicle sizes side-by-side with transparent base rates, arrival ETAs, and verified capacity limits.</p>
+      </div>
+      <div class="workflowStep">
+        <span class="workflowStep__num">Step 04</span>
+        <h4>Single-Tap Booking</h4>
+        <p>Confirm in one click. Receive driver assignment within 90 seconds with live GPS tracking and pickup OTP.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ WHAT FITS ============ -->
+<section class="fits" id="fits">
+  <div class="container">
+    <div class="fits__head">
+      <div>
+        <p class="kicker">What fits?</p>
+        <h2>Enter the weight. We'll find the right vehicle.</h2>
+      </div>
+      <p>From an envelope to a 25-tonne load. We match the weight to the smallest vehicle that can carry it.</p>
+    </div>
+    <div class="fitPanel" data-reveal>
+      <form class="fitForm" novalidate>
+        <label class="fitLabel" for="fitWeight">How much are you sending?</label>
+        <div class="fitEntry">
+          <input id="fitWeight" type="text" inputmode="decimal" autocomplete="off" placeholder="0" aria-describedby="fitError">
+          <div class="fitUnit" role="radiogroup" aria-label="Unit">
+            <label><input type="radio" name="fitUnit" value="kg" checked><span>kg</span></label>
+            <label><input type="radio" name="fitUnit" value="t"><span>tonnes</span></label>
+          </div>
+        </div>
+        <p class="fitError" id="fitError" role="alert"></p>
+        <p class="fitHint">Or start from a common load</p>
+        <div class="fitChips">
+          <button type="button" data-kg="1">Documents</button>
+          <button type="button" data-kg="60">Washing machine</button>
+          <button type="button" data-kg="650">Small house shift</button>
+          <button type="button" data-kg="3000">Warehouse transfer</button>
+          <button type="button" data-kg="8000">Pallets</button>
+          <button type="button" data-kg="22000">Steel load</button>
+        </div>
+      </form>
+      <div class="fitResult" aria-live="polite">
+        <img class="fitPic" src="assets/vehicles3d/bike.jpg" alt="" width="900" height="560">
+        <h3 data-fit="name">Your vehicle</h3>
+        <p data-fit="cap"></p>
+        <div class="fitGauge" aria-hidden="true"><div class="fitGauge__fill"></div></div>
+        <span class="fitPct" data-fit="pct"></span>
+        <p data-fit="use"></p>
+        <a class="btn btn-primary" data-fit="cta" href="/book/?service=local">Get a price</a>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ TRACKING ============ -->
+<section class="trackBand" id="tracking">
+  <div class="container">
+    <div class="trackCard card" data-reveal>
+      <div>
+        <h3 class="eyebrow">Already on its way?</h3>
+        <h2>Where's my parcel?</h2>
+        <p class="muted" style="margin:6px 0 0">Need to send something back? <a class="link" href="/returns/">Start a return or exchange →</a></p>
+      </div>
+      <div class="trackTabs" role="tablist">
+        <button role="tab" aria-selected="true" data-track-tab="awb_track">AWB number</button>
+        <button role="tab" aria-selected="false" data-track-tab="track_id">Order ID</button>
+      </div>
+      <form id="awb_track" class="trackForm">
+        <input id="awb" name="awb" type="text" placeholder="Enter AWB number" required>
+        <button id="awb_btn" class="btn btn-primary" type="submit">Track now</button>
+      </form>
+      <form id="track_id" class="trackForm hidden">
+        <input id="order_id" name="order_id" type="text" placeholder="Order ID" required>
+        <input id="phone_track" name="phone" type="text" inputmode="numeric" maxlength="10" placeholder="Phone number" required>
+        <button id="track_btn" class="btn btn-primary" type="submit">Track now</button>
+      </form>
+      <p class="error" id="track-error" role="alert"></p>
+      <div id="track-result" class="trackResult hidden" aria-live="polite"></div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ SELLERS ============ -->
+<section class="sellers" id="sellers">
+  <div class="container">
+    <div class="sellers__head">
+      <p class="kicker">Sell online?</p>
+      <h2>Every order gets a label. Every label has a plan.</h2>
+      <p>Couriers, failed deliveries, returns and COD, run by rules you set.</p>
+    </div>
+    <div class="sellers__grid">
+      <div class="labels">
+        <article class="shipLabel" data-reveal>
+          <div class="shipLabel__top"><span>UT-01</span><span>ROUTING</span></div>
+          <h3>Couriers, your way</h3>
+          <p>Rank by price, speed or your own order. Block risky pincodes and set SKU rules, and every booking follows them.</p>
+          <span class="stamp">Rules on</span><div class="shipLabel__bars"></div>
+        </article>
+        <article class="shipLabel" data-reveal>
+          <div class="shipLabel__top"><span>UT-02</span><span>RTO RISK</span></div>
+          <h3>Stop bad orders early</h3>
+          <p>Each order gets a risk score. Risky COD orders are confirmed by WhatsApp or IVR, or held for review.</p>
+          <span class="stamp">Confirmed</span><div class="shipLabel__bars"></div>
+        </article>
+        <article class="shipLabel" data-reveal>
+          <div class="shipLabel__top"><span>UT-03</span><span>WEIGHT</span></div>
+          <h3>No weight surprises</h3>
+          <p>Freeze each SKU's packed weight with photo proof. Disputes above it close in your favour.</p>
+          <span class="stamp">Frozen</span><div class="shipLabel__bars"></div>
+        </article>
+        <article class="shipLabel" data-reveal>
+          <div class="shipLabel__top"><span>UT-04</span><span>COD</span></div>
+          <h3>Every rupee, matched</h3>
+          <p>Match each COD payout to its shipments, flag shortfalls, and get GST invoices for all your freight.</p>
+          <span class="stamp">Matched</span><div class="shipLabel__bars"></div>
+        </article>
+        <article class="shipLabel" data-reveal>
+          <div class="shipLabel__top"><span>UT-05</span><span>DELAYS</span></div>
+          <h3>Rescue late parcels</h3>
+          <p>Delay Radar shows late shipments by reason and courier. Delivery Boost gets in touch with buyers and books the re-attempt.</p>
+          <span class="stamp">Re-attempt</span><div class="shipLabel__bars"></div>
+        </article>
+        <article class="shipLabel" data-reveal>
+          <div class="shipLabel__top"><span>UT-06</span><span>RETURNS</span></div>
+          <h3>Returns they do themselves</h3>
+          <p>A buyer portal for returns and exchanges, with your return window, photo rules and approvals.</p>
+          <span class="stamp">Approved</span><div class="shipLabel__bars"></div>
+        </article>
+      </div>
+
+      <!-- Sign-up / login widget: state machine lives in js/signup-form.js -->
+      <div class="bannerLoginForm card" id="signup">
+        <div id="authWidget">
+        <!-- step: mobile -->
+        <div id="mobile-section">
+          <h3 class="colorBlack">Open a seller account</h3>
+          <p class="muted">Enter your mobile number to get started.</p>
+          <div class="phone-field">
+            <span class="cc">+91</span>
+            <input id="mobile" type="tel" inputmode="numeric" autocomplete="tel-national" placeholder="Mobile number" maxlength="10" aria-label="Mobile number" aria-describedby="mobile-error">
+          </div>
+          <p class="error" id="mobile-error" role="alert"></p>
+          <p class="error" id="request-message" role="alert"></p>
+          <p class="success" id="request-success"></p>
+          <button id="feature-request-otp-btn" class="btn btn-primary btn-block" type="button" disabled>Get Started</button>
+          <div class="divider"><span>or continue with</span></div>
+          <div class="social-row">
+            <button id="others-login-btn" class="social-btn" type="button"><img src="assets/icons/mail.svg" alt="">Email</button>
+            <button id="google-login-btn" class="social-btn google" type="button" disabled title="Connect your OAuth provider in js/signup-form.js"><img src="assets/icons/google-g.svg" alt="">Google</button>
+          </div>
+          <p class="fine">By continuing you agree to the Terms and Privacy Policy.</p>
+        </div>
+
+        <!-- step: otp -->
+        <div id="otp-section" class="hidden">
+          <h3 class="colorBlack">Verify your phone number</h3>
+          <p class="muted">Code sent to +91 <b id="user-mobile-number"></b> <span id="edit-mobile" role="button" tabindex="0" class="link">Edit</span></p>
+          <div class="otp-row">
+            <input class="otp-digit" type="text" inputmode="numeric" maxlength="1" autocomplete="one-time-code" aria-label="Digit 1">
+            <input class="otp-digit" type="text" inputmode="numeric" maxlength="1" aria-label="Digit 2">
+            <input class="otp-digit" type="text" inputmode="numeric" maxlength="1" aria-label="Digit 3">
+            <input class="otp-digit" type="text" inputmode="numeric" maxlength="1" aria-label="Digit 4">
+            <input class="otp-digit" type="text" inputmode="numeric" maxlength="1" aria-label="Digit 5">
+            <input class="otp-digit" type="text" inputmode="numeric" maxlength="1" aria-label="Digit 6">
+          </div>
+          <p class="resend" id="resend-text"></p>
+          <p class="error" id="otp-error" role="alert"></p>
+          <p class="success" id="otp-message"></p>
+          <button id="feature-verify-otp-btn" class="btn btn-primary btn-block" type="button" disabled>Verify Number</button>
+        </div>
+
+        <!-- step: profile (first login) -->
+        <div id="profile-section" class="hidden">
+          <h3 class="colorBlack">Tell us about you</h3>
+          <label class="field"><span>Full name</span><input id="name" type="text" autocomplete="name"></label>
+          <label class="field"><span>Work email</span><input id="email" type="email" autocomplete="email"></label>
+          <p class="error" id="profile-error" role="alert"></p>
+          <button id="update-profile-btn" class="btn btn-primary btn-block" type="button">Update Profile</button>
+        </div>
+
+        <!-- step group: email -->
+        <div id="email-section" class="hidden">
+          <h3 class="colorBlack">Login / Sign up with email</h3>
+          <div id="email-check-step">
+            <label class="field"><span>Email</span><input id="email-input" type="email" autocomplete="email"></label>
+            <p class="error" id="email-error" role="alert"></p>
+            <button id="check-email-btn" class="btn btn-primary btn-block" type="button">Continue</button>
+          </div>
+          <div id="email-login-step" class="hidden">
+            <p class="muted">Welcome back, <b class="email-display"></b></p>
+            <label class="field"><span>Password</span><input id="login-password" type="password" autocomplete="current-password"></label>
+            <p class="error" id="login-error" role="alert"></p>
+            <button id="email-login-btn" class="btn btn-primary btn-block" type="button">Login</button>
+            <button id="forgot-password-btn" class="link-btn" type="button">Forgot password?</button>
+          </div>
+          <div id="email-signup-step" class="hidden">
+            <p class="muted">Create an account for <b class="email-display"></b></p>
+            <label class="field"><span>Password (min 8 characters)</span><input id="signup-password" type="password" autocomplete="new-password"></label>
+            <label class="field"><span>Confirm password</span><input id="signup-password-confirm" type="password" autocomplete="new-password"></label>
+            <p class="error" id="signup-error" role="alert"></p>
+            <button id="email-signup-btn" class="btn btn-primary btn-block" type="button">Sign Up</button>
+          </div>
+          <div id="forgot-password-step" class="hidden">
+            <p class="muted">We'll send a reset code to <b class="email-display"></b></p>
+            <p class="error" id="fp-error" role="alert"></p>
+            <button id="send-otp-btn" class="btn btn-primary btn-block" type="button">Send OTP</button>
+          </div>
+          <div id="forgot-otp-step" class="hidden">
+            <p class="muted">Enter the code sent to <b id="fp-otp-email-display"></b></p>
+            <label class="field"><span>OTP</span><input id="fp-otp" type="number" inputmode="numeric"></label>
+            <p class="error" id="fp-otp-error" role="alert"></p>
+            <p class="success" id="fp-otp-message"></p>
+            <button id="verify-fp-otp-btn" class="btn btn-primary btn-block" type="button">Verify OTP</button>
+          </div>
+          <div id="reset-password-step" class="hidden">
+            <p class="muted">Set a new password for <b id="reset-email-display"></b></p>
+            <label class="field"><span>New password</span><input id="new-password" type="password" autocomplete="new-password"></label>
+            <label class="field"><span>Confirm new password</span><input id="new-password-confirm" type="password" autocomplete="new-password"></label>
+            <p class="error" id="reset-error" role="alert"></p>
+            <button id="reset-password-btn" class="btn btn-primary btn-block" type="button">Reset Password</button>
+          </div>
+          <button id="back-to-mobile-btn" class="social-btn back" type="button">← Back to mobile login</button>
+        </div>
+
+        <p class="dev-hint hidden" id="dev-hint"></p>
+        </div>
+      </div>
+    </div>
+
+    <div class="sellerFor">
+      <h3>Who ships with it</h3>
+      <div class="sellerFor__row">
+        <div><b>Online stores</b><p>Ship automatically from your store, with courier and pincode rules.</p></div>
+        <div><b>Social sellers</b><p>Turn chats and DMs into booked shipments in a few taps.</p></div>
+        <div><b>Growing teams</b><p>Roles for ops, finance and support, with a full activity log.</p></div>
+        <div><b>Exporters</b><p>Ship abroad with quotes, duty estimates and paperwork guidance.</p></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<div class="channelBelt" id="integrations" aria-label="Sales channels: Shopify, WooCommerce, Magento, Amazon, Instagram Shop, custom API and CSV upload">
+  <div class="channelBelt__track" aria-hidden="true">
+    <span>Shopify</span><span>WooCommerce</span><span>Magento</span><span>Amazon</span><span>Instagram Shop</span><span>Custom API</span><span>CSV upload</span>
+    <span>Shopify</span><span>WooCommerce</span><span>Magento</span><span>Amazon</span><span>Instagram Shop</span><span>Custom API</span><span>CSV upload</span>
+  </div>
+</div>
+
+<!-- ============ DEVELOPERS ============ -->
+<section class="devBand" id="developers">
+  <div class="container devBand__grid">
+    <div>
+      <p class="kicker" style="color:var(--accent)">For developers</p>
+      <h2>Your systems <span>move with the parcel.</span></h2>
+      <p>A REST API and webhooks keep your store, ERP and support tools up to date on every shipment.</p>
+      <ul class="devBand__points">
+        <li><b>API keys</b>Create keys for your systems and revoke them any time.</li>
+        <li><b>Signed webhooks</b>Order, shipment, NDR and return events, signed with HMAC.</li>
+        <li><b>Team roles</b>Give ops, finance and support exactly the access they need.</li>
+      </ul>
+    </div>
+    <div class="terminal" data-reveal aria-hidden="true">
+      <div class="terminal__bar"><span>POST your-store.example/webhooks</span><b>● sample feed</b></div>
+      <ol id="hookFeed"></ol>
+    </div>
+  </div>
+</section>
+
+<!-- ============ PARTNERS ============ -->
+<section class="partnerRoad">
+  <div class="container partnerRoad__inner">
+    <div>
+      <h2>Got wheels? Join the convoy.</h2>
+      <p>Drivers, fleet owners, transport agencies and contractors get matched to jobs in their city.</p>
+    </div>
+    <a class="btn btn-dark" href="/partners/">Partner with us</a>
+  </div>
+</section>
+</main>
+
+<!-- ============ CINEMATIC CURTAIN MOTION FOOTER ============ -->
+<div class="cinematic-curtain">
+  <footer class="cinematic-footer cinematic-footer-wrapper">
+    <!-- Ambient Aurora & Grid -->
+    <div class="footer-aurora animate-footer-breathe"></div>
+    <div class="footer-bg-grid"></div>
+
+    <!-- Giant Background Parallax Text -->
+    <div class="footer-giant-bg-text">UT LOGISTICS</div>
+
+    <!-- 1. Diagonal Sleek Marquee (Top of footer) -->
+    <div class="footer-marquee-ribbon">
+      <div class="animate-footer-scroll-marquee footer-marquee-track">
+        <div class="footer-marquee-item">
+          <span>Compare Porter &amp; Rapido</span> <span class="footer-marquee-dot">✦</span>
+          <span>One Unified Search</span> <span class="footer-marquee-dot">✦</span>
+          <span>Best Vehicle Match</span> <span class="footer-marquee-dot">✦</span>
+          <span>Zero Surge Surprises</span> <span class="footer-marquee-dot">✦</span>
+          <span>Pickup OTP Verified</span> <span class="footer-marquee-dot">✦</span>
+          <span>Live GPS Tracking</span> <span class="footer-marquee-dot">✦</span>
+        </div>
+        <div class="footer-marquee-item">
+          <span>Compare Porter &amp; Rapido</span> <span class="footer-marquee-dot">✦</span>
+          <span>One Unified Search</span> <span class="footer-marquee-dot">✦</span>
+          <span>Best Vehicle Match</span> <span class="footer-marquee-dot">✦</span>
+          <span>Zero Surge Surprises</span> <span class="footer-marquee-dot">✦</span>
+          <span>Pickup OTP Verified</span> <span class="footer-marquee-dot">✦</span>
+          <span>Live GPS Tracking</span> <span class="footer-marquee-dot">✦</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- 2. Main Center Content -->
+    <div class="footer-center-content">
+      <h2 class="footer-heading footer-text-glow">Ready to ship smarter?</h2>
+      <p class="footer-subheading">
+        Compare 2-wheelers, Tata Ace mini-trucks, and commercial freight side-by-side. Book the perfect vehicle in under 2 minutes.
+      </p>
+
+      <!-- Interactive Magnetic Pills Layout -->
+      <div class="footer-pills-wrap">
+        <div class="footer-pills-row-primary">
+          <a href="#book" class="footer-glass-pill footer-pill-primary">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2.2"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+            Compare Vehicles Now
+          </a>
+          <a href="/track/" class="footer-glass-pill footer-pill-primary">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#1E9E6A" stroke-width="2.2"><path d="M12 22s-8-4.5-8-11.8A8 8 0 0 1 12 2a8 8 0 0 1 8 8.2c0 7.3-8 11.8-8 11.8z"/><circle cx="12" cy="10" r="3"/></svg>
+            Track an Order
+          </a>
+          <a href="/partners/" class="footer-glass-pill footer-pill-primary">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><rect x="1" y="3" width="15" height="13"></rect><polygon points="16 8 20 8 23 11 23 16 16 16 16 8"></polygon><circle cx="5.5" cy="18.5" r="2.5"></circle><circle cx="18.5" cy="18.5" r="2.5"></circle></svg>
+            Drive with Us
+          </a>
+        </div>
+
+        <div class="footer-pills-row-secondary">
+          <a href="/pricing/" class="footer-glass-pill footer-pill-secondary">Fleet Pricing</a>
+          <a href="/returns/" class="footer-glass-pill footer-pill-secondary">Returns Portal</a>
+          <a href="#sellers" class="footer-glass-pill footer-pill-secondary">Seller API &amp; Webhooks</a>
+          <a href="mailto:hello@example.com" class="footer-glass-pill footer-pill-secondary">Support &amp; Help</a>
+        </div>
+      </div>
+    </div>
+
+    <!-- 3. Bottom Bar / Credits -->
+    <div class="footer-bottom-bar">
+      <div class="footer-copyright">
+        © <span id="year"></span> UT Log. All rights reserved.
+      </div>
+
+      <div class="footer-glass-pill footer-love-badge">
+        <span>Built for Speed</span>
+        <span class="animate-footer-heartbeat" style="color:#FF4D4D;">❤</span>
+        <span>by</span>
+        <b style="color:#fff; margin-left:3px;">UT Logistics</b>
+      </div>
+
+      <button id="footerBackToTop" class="footer-glass-pill footer-back-to-top" type="button" aria-label="Back to top">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 15l-6-6-6 6"/></svg>
+      </button>
+    </div>
+  </footer>
+</div>
+
+<script src="js/utm.js?v=35"></script>
+<script src="js/ui.js?v=35"></script>
+<script src="js/signup-form.js?v=35"></script>
+<script src="js/tracking.js?v=35"></script>
+<script src="js/hero-animation.js?v=35"></script>
+<script src="js/home-book.js?v=35"></script>
+<script src="js/home-fx.js?v=35"></script>
+<script src="js/cinematic-footer.js?v=35"></script>
+</body>
+</html>

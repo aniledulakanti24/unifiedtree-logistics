@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Book a delivery — UT Log</title>
+  <meta name="description" content="Send anything from a document to a 25-tonne load: local bikes and trucks, national parcels and freight, international shipping.">
+  <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&family=Plus+Jakarta+Sans:wght@500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/css/styles.css?v=9">
+  <link rel="stylesheet" href="/css/book.css?v=11">
+</head>
+<body>
+  <header class="site-header" style="position:sticky">
+    <div class="container site-header__inner">
+      <a href="/" class="brand"><img src="/assets/logo.svg" alt="UT Log" width="124" height="32"></a>
+      <nav class="bookNav" aria-label="Main"><a href="/book/" target="_blank" rel="noopener" aria-current="page">Book a delivery</a><a href="/track/" target="_blank" rel="noopener">Track</a><a href="/pricing/" target="_blank" rel="noopener">Pricing</a><a href="/partners/" target="_blank" rel="noopener">Partner with us</a></nav>
+      <span style="flex:1"></span>
+      <a href="/#signup" class="btn btn-ghost">Seller login</a>
+    </div>
+  </header>
+
+  <main class="bookPage">
+    <section class="bookHero"><div class="container">
+      <p class="eyebrow">Book a delivery</p>
+      <h1>Send anything, <span class="grad">anywhere.</span></h1>
+      <p class="lead">Compare courier services, delivery apps and independent vehicles by speed, price, weight limit and vehicle, then book the one you choose.</p>
+    </div></section>
+
+    <div class="container bookGrid">
+      <form class="card bookForm" id="qf" novalidate>
+        <div class="segRow">
+          <div class="pillSeg" role="radiogroup" aria-label="Who is sending">
+            <label><input type="radio" name="segment" value="b2c" checked><span>Personal</span></label>
+            <label><input type="radio" name="segment" value="b2b"><span>Business</span></label>
+          </div>
+        </div>
+
+        <div class="serviceTabs" role="radiogroup" aria-label="Service">
+          <label><input type="radio" name="service" value="local" checked><span><b>Local</b><small>Within a city · bikes to trucks</small></span></label>
+          <label><input type="radio" name="service" value="national"><span><b>National</b><small>Parcels & freight across India</small></span></label>
+          <label><input type="radio" name="service" value="international"><span><b>International</b><small>Express, air & sea</small></span></label>
+        </div>
+
+        <fieldset data-for="local">
+          <legend>Route</legend>
+          <label class="f">City<select name="city" id="city"></select></label>
+          <div class="pair"><label class="f">Pickup area<select name="from" id="fromLoc"></select></label><label class="f">Drop area<select name="to" id="toLoc"></select></label></div>
+        </fieldset>
+        <fieldset data-for="national" hidden>
+          <legend>Route</legend>
+          <div class="pair"><label class="f">Pickup pincode<input name="from_pincode" inputmode="numeric" maxlength="6" placeholder="560034"></label><label class="f">Delivery pincode<input name="to_pincode" inputmode="numeric" maxlength="6" placeholder="110017"></label></div>
+        </fieldset>
+        <fieldset data-for="international" hidden>
+          <legend>Route</legend>
+          <div class="pair"><label class="f">Pickup pincode (India)<input name="from_pincode_i" inputmode="numeric" maxlength="6" placeholder="560034"></label><label class="f">Destination country<select name="country" id="country"></select></label></div>
+        </fieldset>
+
+        <fieldset>
+          <legend>What are you sending?</legend>
+          <label class="f">Type of goods<select name="category" id="category"></select></label>
+          <div class="trio">
+            <label class="f">Total weight<span class="unitWrap"><input name="weight" inputmode="decimal" value="5" required><select name="unit" aria-label="Weight unit"><option value="kg">kg</option><option value="t">tonnes</option></select></span></label>
+            <label class="f">Pieces<input name="pieces" type="number" min="1" value="1"></label>
+            <label class="f">Value (₹, optional)<input name="declared_value" inputmode="numeric" placeholder="For insurance"></label>
+          </div>
+          <details class="dims"><summary>Add size (helps pick the right vehicle)</summary>
+            <div class="trio"><label class="f">Length (cm)<input name="length" type="number" min="1"></label><label class="f">Breadth (cm)<input name="breadth" type="number" min="1"></label><label class="f">Height (cm)<input name="height" type="number" min="1"></label></div>
+          </details>
+          <div class="quickLoads" aria-label="Quick picks"><button type="button" data-w="0.5">📄 Documents</button><button type="button" data-w="8">📦 Box</button><button type="button" data-w="60">🛋️ Furniture</button><button type="button" data-w="1200">🏠 1 BHK move</button><button type="button" data-w="6000">🏭 Pallets (6 t)</button></div>
+        </fieldset>
+
+        <fieldset>
+          <legend>When?</legend>
+          <div class="pair">
+            <label class="f">Pickup<select name="when" id="when"><option value="now">As soon as possible</option><option value="later">Schedule a time</option></select></label>
+            <label class="f" id="atWrap" hidden>Pickup time<input name="pickup_at" type="datetime-local"></label>
+          </div>
+          <label class="f">Deliver by (optional)<input name="deliver_by" type="datetime-local"></label>
+          <label class="f" data-for="local">Loading helpers<select name="helpers"><option value="0">No helper — I'll load</option><option value="1">1 helper</option><option value="2">2 helpers</option><option value="3">3 helpers</option></select></label>
+        </fieldset>
+
+        <button class="btn btn-primary btn-block" id="go">See delivery options</button>
+        <p class="error" id="qErr" role="alert"></p>
+      </form>
+
+      <section class="results" aria-live="polite">
+        <div id="summary"></div>
+        <div id="options"><div class="emptyState card"><img src="/assets/vehicles/truck14.svg" alt="" width="160"><h3>Your options will appear here</h3><p class="muted">We show who's available on your route, from courier services and delivery apps to independent vehicle owners. You compare them and choose.</p></div></div>
+      </section>
+    </div>
+
+    <section class="section lightbg" id="fleet"><div class="container">
+      <h2>Vehicles for every load</h2>
+      <p class="lead">Pick one yourself, or let us recommend based on weight and size.</p>
+      <div class="fleetGrid" id="fleetGrid"></div>
+    </div></section>
+  </main>
+
+  <div class="sheetBackdrop" id="sheet" hidden>
+    <form class="sheet card" id="bf" novalidate>
+      <button type="button" class="sheetClose" data-close aria-label="Close">×</button>
+      <div id="chosen"></div>
+      <div class="pair"><label class="f">Your name<input name="name" autocomplete="name" required></label><label class="f">Mobile number<input name="phone" inputmode="numeric" maxlength="10" autocomplete="tel-national" required></label></div>
+      <div class="pair" data-b2b hidden><label class="f">Company<input name="company" autocomplete="organization"></label><label class="f">GSTIN (optional)<input name="gstin" maxlength="15" style="text-transform:uppercase"></label></div>
+      <label class="f">Pickup address<input name="pickup_address" placeholder="Building, street, landmark" required></label>
+      <label class="f">Drop address<input name="drop_address" placeholder="Building, street, landmark" required></label>
+      <div class="pillSeg wide" role="radiogroup" aria-label="Payment"><label><input type="radio" name="pay" value="cash" checked><span>Pay at pickup</span></label><label><input type="radio" name="pay" value="online"><span>Pay online</span></label></div>
+      <button class="btn btn-primary btn-block" id="bookBtn">Confirm booking</button>
+      <p class="error" id="bErr" role="alert"></p>
+      <p class="muted small">Demo build: no payment is taken and no real driver is dispatched.</p>
+    </form>
+  </div>
+
+  <script src="/js/book.js"></script>
+</body>
+</html>

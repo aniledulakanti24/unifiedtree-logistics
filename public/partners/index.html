@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Partner with UT Log — drivers, fleet owners & transport agencies</title>
+  <meta name="description" content="Bike riders, three-wheeler and truck owners, transport agencies and contractors: get delivery jobs in your city.">
+  <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&family=Plus+Jakarta+Sans:wght@500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/css/styles.css?v=9">
+  <link rel="stylesheet" href="/css/book.css?v=9">
+  <style>
+    .pGrid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 460px); gap: 28px; align-items: start; padding-bottom: 64px; }
+    .perks { display: grid; gap: 12px; margin-top: 20px; }
+    .perk { display: flex; gap: 14px; align-items: flex-start; background: #fff; border: 1px solid var(--line); border-radius: 16px; padding: 16px; }
+    .perk b { display: block; font-size: 16px; }
+    .perk span.ico { width: 42px; height: 42px; border-radius: 12px; background: var(--primary-50); display: grid; place-items: center; font-size: 20px; flex: none; }
+    .vehPick { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+    .vehPick label { display: flex; align-items: center; gap: 8px; border: 1.5px solid var(--line); border-radius: 12px; padding: 8px; cursor: pointer; font-size: 13px; font-weight: 600; }
+    .vehPick label:has(input:checked) { border-color: var(--primary); background: var(--primary-50); }
+    .vehPick img { width: 48px; height: 26px; object-fit: contain; }
+    .vehPick input { accent-color: var(--primary); }
+    .stats { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 16px; }
+    @media (max-width: 960px) { .pGrid { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body>
+  <header class="site-header" style="position:sticky">
+    <div class="container site-header__inner">
+      <a href="/" class="brand"><img src="/assets/logo.svg" alt="UT Log" width="124" height="32"></a>
+      <nav class="bookNav" aria-label="Main"><a href="/book/" target="_blank" rel="noopener">Book a delivery</a><a href="/track/" target="_blank" rel="noopener">Track</a><a href="/pricing/" target="_blank" rel="noopener">Pricing</a><a href="/partners/" target="_blank" rel="noopener" aria-current="page">Partner with us</a></nav>
+      <span style="flex:1"></span>
+      <a href="/#signup" class="btn btn-ghost">Seller login</a>
+    </div>
+  </header>
+  <main class="bookPage">
+    <section class="bookHero"><div class="container">
+      <p class="eyebrow">Partner with us</p>
+      <h1>Your vehicle. <span class="grad">More jobs.</span></h1>
+      <p class="lead">Bike riders, three-wheeler and truck owners, transport agencies and contractors — join the UT Log network and get bookings in your city.</p>
+      <div class="stats" id="stats"></div>
+    </div></section>
+    <div class="container pGrid">
+      <div>
+        <div class="perks">
+          <div class="perk"><span class="ico">📍</span><div><b>Jobs matched to your vehicle</b><span class="muted">We only send bookings your vehicle can carry, in the city you choose.</span></div></div>
+          <div class="perk"><span class="ico">💸</span><div><b>Weekly payouts</b><span class="muted">Earnings settle to your bank every week with a clear trip-by-trip statement.</span></div></div>
+          <div class="perk"><span class="ico">🚚</span><div><b>From one bike to a full fleet</b><span class="muted">Individuals, fleet owners, agencies and contractors can all join with their vehicle mix.</span></div></div>
+          <div class="perk"><span class="ico">🔐</span><div><b>OTP-verified pickup & drop</b><span class="muted">Every trip uses pickup and delivery OTPs, so handovers are proven.</span></div></div>
+        </div>
+        <h3 style="margin-top:28px">Recently joined</h3>
+        <div id="recent" class="muted">No partners have joined in this session yet.</div>
+      </div>
+      <form class="card bookForm" id="pf" novalidate style="position:static">
+        <h2 style="margin:0">Join the network</h2>
+        <label class="f">Your name or business name<input name="business_name" autocomplete="organization" required></label>
+        <div class="pair"><label class="f">I am a<select name="partner_type"><option>Individual driver</option><option>Fleet owner</option><option>Transport agency</option><option>Contractor</option></select></label>
+          <label class="f">City<select name="city" id="pCity"></select></label></div>
+        <div class="f">Vehicles you operate<div class="vehPick" id="vehPick"></div></div>
+        <div class="pair"><label class="f">Number of vehicles<input name="fleet_size" type="number" min="1" value="1"></label><label class="f">Mobile number<input name="phone" inputmode="numeric" maxlength="10" required></label></div>
+        <label class="f">GSTIN (agencies, optional)<input name="gstin" maxlength="15" style="text-transform:uppercase"></label>
+        <button class="btn btn-primary btn-block">Register</button>
+        <p class="error" id="pErr" role="alert"></p>
+        <p class="muted small" style="margin:0">Demo build: partners are approved instantly. Before launch, add document checks (licence, RC, insurance) and a background check.</p>
+      </form>
+    </div>
+  </main>
+  <script>
+    (function () {
+      var $ = function (s) { return document.querySelector(s); };
+      var esc = function (s) { var d = document.createElement('div'); d.textContent = s == null ? '' : s; return d.innerHTML; };
+      var form = $('#pf');
+      function stats() {
+        fetch('/v1/public/partners/stats').then(function (r) { return r.json(); }).then(function (s) {
+          $('#stats').innerHTML = '<span class="chip2">' + s.partners + ' partners in the network</span>' + s.by_city.map(function (c) { return '<span class="chip2">' + esc(c.city) + ' · ' + c.partners + '</span>'; }).join('');
+          if (s.recent.length) $('#recent').innerHTML = s.recent.map(function (p) { return '<div class="perk" style="padding:12px"><div><b style="font-size:14px">' + esc(p.name) + '</b><span class="muted">' + esc(p.type) + ' · ' + esc(p.city) + ' · ' + p.vehicles + ' vehicle type(s)</span></div></div>'; }).join('');
+        });
+      }
+      fetch('/v1/public/booking/meta').then(function (r) { return r.json(); }).then(function (m) {
+        $('#pCity').innerHTML = m.cities.map(function (c) { return '<option value="' + c.key + '">' + esc(c.name) + '</option>'; }).join('');
+        $('#vehPick').innerHTML = m.vehicles.map(function (v) { return '<label><input type="checkbox" value="' + v.key + '"><img src="/assets/vehicles/' + v.key + '.svg" alt="">' + esc(v.name) + '</label>'; }).join('');
+      });
+      form.phone.addEventListener('input', function () { this.value = this.value.replace(/\D/g, '').slice(0, 10); });
+      form.addEventListener('submit', function (e) {
+        e.preventDefault();
+        $('#pErr').textContent = '';
+        var body = { business_name: form.business_name.value.trim(), partner_type: form.partner_type.value, city: form.city.value, fleet_size: form.fleet_size.value, phone: form.phone.value, gstin: form.gstin.value.trim(),
+          vehicles: Array.prototype.map.call(form.querySelectorAll('#vehPick input:checked'), function (c) { return c.value; }) };
+        fetch('/v1/public/partners', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+          .then(function (r) { return r.json().then(function (d) { if (!r.ok) throw new Error(d.message); return d; }); })
+          .then(function (d) {
+            form.innerHTML = '<div class="success"><div class="tick">✓</div><h2 style="margin:0 0 6px">Welcome aboard</h2><p class="muted">Partner ID <b class="mono">' + esc(d.id) + '</b></p><p class="muted">' + esc(d.message) + '</p><a class="btn btn-primary btn-block" href="/book/">See a booking as a customer</a></div>';
+            stats();
+          })
+          .catch(function (err) { $('#pErr').textContent = err.message; });
+      });
+      stats();
+    })();
+  </script>
+</body>
+</html>

@@ -1,0 +1,144 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Track your order</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&family=Plus+Jakarta+Sans:wght@500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    :root { --brand: #0B5D45; }
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: 'Inter', system-ui, sans-serif; background: #F6F8F7; color: #101C18; }
+    header { background: var(--brand); color: #fff; padding: 20px 16px; }
+    header .wrap, main { max-width: 640px; margin: 0 auto; }
+    header h1 { margin: 0; font-size: 20px; }
+    header p { margin: 4px 0 0; opacity: .85; }
+    main { padding: 16px; display: grid; gap: 14px; }
+    .card { background: #fff; border-radius: 14px; padding: 18px; box-shadow: 0 1px 2px rgba(0,0,0,.05); }
+    form { display: flex; gap: 8px; }
+    input { flex: 1; min-width: 0; border: 1px solid #E4E9E7; border-radius: 10px; padding: 12px; font: inherit; }
+    button { border: 0; border-radius: 10px; padding: 12px 18px; background: var(--brand); color: #fff; font: inherit; font-weight: 700; cursor: pointer; }
+    .status { font-size: 24px; font-weight: 800; color: var(--brand); }
+    .muted { color: #6B7874; font-size: 14px; }
+    .bar { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; margin: 14px 0 6px; }
+    .bar i { height: 6px; border-radius: 9px; background: #E4E9E7; }
+    .bar i.on { background: var(--brand); }
+    .steps { display: grid; grid-template-columns: repeat(4, 1fr); font-size: 11px; color: #6B7874; }
+    ol { list-style: none; margin: 0; padding: 0; }
+    li { padding: 0 0 14px 18px; border-left: 2px solid #E4E9E7; position: relative; }
+    li::before { content: ''; position: absolute; left: -7px; top: 3px; width: 12px; height: 12px; border-radius: 50%; background: #fff; border: 2px solid var(--brand); }
+    li:first-child::before { background: var(--brand); }
+    .err { color: #DC2626; }
+    .starsIn { display: flex; gap: 6px; margin: 10px 0; }
+    .starsIn button { background: none; color: #CBCDDB; font-size: 30px; padding: 0 2px; line-height: 1; }
+    .starsIn button.on { color: #F5B301; }
+    #rate input { width: 100%; margin-bottom: 10px; }
+    #rate .send { width: 100%; }
+    .recs { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 10px; }
+    .rec { display: grid; gap: 4px; padding: 12px; border: 1px solid #E4E9E7; border-radius: 12px; color: inherit; text-decoration: none; font-size: 14px; }
+    .rec b { color: var(--brand); }
+  </style>
+</head>
+<body>
+  <header><div class="wrap"><h1 id="brand">Track your order</h1><p id="banner"></p></div></header>
+  <main>
+    <form class="card" id="f"><input name="awb" placeholder="AWB number or booking ID (BK…)" aria-label="Tracking number or booking ID" required><button>Track</button></form>
+    <div id="out"></div>
+  </main>
+  <script>
+    (function () {
+      var LABEL = { NEW: 'Order placed', ON_HOLD: 'Order on hold', READY_TO_SHIP: 'Packed', PICKUP_SCHEDULED: 'Pickup scheduled', IN_TRANSIT: 'In transit', DELIVERED: 'Delivered', RTO: 'Returning to seller', CANCELLED: 'Cancelled' };
+      var STAGE = { NEW: 0, ON_HOLD: 0, READY_TO_SHIP: 1, PICKUP_SCHEDULED: 1, IN_TRANSIT: 2, DELIVERED: 3, RTO: 2, CANCELLED: 0 };
+      var out = document.getElementById('out');
+      var esc = function (s) { var d = document.createElement('div'); d.textContent = s == null ? '' : s; return d.innerHTML; };
+      var fmt = function (iso) { return new Date(iso).toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }); };
+      // ---- bookings (BK…): live trip view, refreshed every few seconds ----
+      var poll = null;
+      var BK_STEPS = { local: ['BOOKED', 'ASSIGNED', 'ARRIVING', 'PICKED_UP', 'IN_TRANSIT', 'DELIVERED'], other: ['BOOKED', 'PICKUP_SCHEDULED', 'PICKED_UP', 'IN_TRANSIT', 'OUT_FOR_DELIVERY', 'DELIVERED'] };
+      function routeSvg(d) {
+        // Straight-line sketch of pickup → drop with the vehicle at its progress.
+        var x = 30 + d.progress * 300;
+        return '<svg viewBox="0 0 360 70" width="100%" height="70" aria-hidden="true"><line x1="30" y1="35" x2="330" y2="35" stroke="#E4E9E7" stroke-width="6" stroke-linecap="round"/>' +
+          '<line x1="30" y1="35" x2="' + x + '" y2="35" stroke="var(--brand)" stroke-width="6" stroke-linecap="round"/><circle cx="30" cy="35" r="8" fill="var(--brand)"/>' +
+          '<circle cx="330" cy="35" r="8" fill="#fff" stroke="var(--brand)" stroke-width="3"/><circle cx="' + x + '" cy="35" r="12" fill="#F5B301" stroke="#101C18" stroke-width="2"/></svg>';
+      }
+      function booking(id) {
+        clearInterval(poll);
+        history.replaceState(null, '', '?id=' + encodeURIComponent(id));
+        var load = function () {
+          fetch('/v1/public/booking/track?id=' + encodeURIComponent(id)).then(function (r) { return r.json().then(function (d) { return { ok: r.ok, d: d }; }); }).then(function (x) {
+            if (!x.ok) { clearInterval(poll); out.innerHTML = '<div class="card err">' + esc(x.d.message) + '</div>'; return; }
+            var d = x.d, steps = BK_STEPS[d.service === 'local' ? 'local' : 'other'], at = steps.indexOf(d.status);
+            document.getElementById('brand').textContent = 'UT Log · ' + (d.service === 'local' ? 'Live trip' : 'Shipment');
+            document.getElementById('banner').textContent = d.route.from + ' → ' + d.route.to + (d.route.distance_km ? ' · ' + d.route.distance_km + ' km' : '');
+            var mins = d.remaining_min, left = d.service === 'local' ? (mins < 60 ? mins + ' min' : Math.floor(mins / 60) + ' h ' + (mins % 60) + ' min') : Math.ceil(mins / 1440) + ' day(s)';
+            out.innerHTML =
+              '<div class="card"><div class="muted">Booking ' + esc(d.id) + ' · ' + esc(d.option.title) + '</div><div class="status">' + esc(d.label) + '</div>' +
+              (d.status !== 'DELIVERED' ? '<div class="muted">' + (d.status === 'BOOKED' || d.status === 'ASSIGNED' || d.status === 'ARRIVING' || d.status === 'PICKUP_SCHEDULED' ? 'Delivery expected in about ' : 'Arriving in about ') + left + '</div>' : '') +
+              '<div class="bar" style="grid-template-columns:repeat(' + steps.length + ',1fr)">' + steps.map(function (s, n) { return '<i class="' + (n <= at ? 'on' : '') + '"></i>'; }).join('') + '</div>' +
+              (d.service === 'local' ? routeSvg(d) : '') + '</div>' +
+              (d.driver ? '<div class="card"><b>Your driver</b><div style="display:flex;gap:12px;align-items:center;margin-top:8px"><div style="width:44px;height:44px;border-radius:50%;background:var(--brand);color:#fff;display:grid;place-items:center;font-weight:800">' + esc(d.driver.name[0]) + '</div>' +
+                '<div><b>' + esc(d.driver.name) + '</b> · ★ ' + esc(d.driver.rating) + '<div class="muted">' + esc(d.driver.vehicle_no) + ' · ' + esc(d.option.provider) + '</div><div class="muted">' + esc(d.driver.phone) + '</div></div></div></div>' : '') +
+              (d.otp ? '<div class="card"><b>' + (d.otp.pickup ? 'Pickup OTP' : 'Delivery OTP') + '</b><div class="muted">Share only with the driver at ' + (d.otp.pickup ? 'pickup' : 'drop') + '.</div><div style="font:800 26px ui-monospace,monospace;letter-spacing:8px;margin-top:6px">' + esc(d.otp.pickup || d.otp.delivery) + '</div></div>' : '') +
+              '<div class="card"><b>Updates</b><ol style="margin-top:12px">' + d.timeline.map(function (t) { return '<li><b>' + esc(t.label) + '</b><div class="muted">' + fmt(t.at) + '</div></li>'; }).join('') + '</ol></div>' +
+              '<div class="card"><b>Details</b><div class="muted">' + esc(d.option.provider) + ' (' + esc(d.option.provider_type) + ') · ' + esc(d.option.capacity) + ' · ₹' + Number(d.total).toLocaleString('en-IN') + '</div>' +
+              '<div class="muted">Pickup: ' + esc(d.route.pickup_address) + '<br>Drop: ' + esc(d.route.drop_address) + '</div>' +
+              '<div class="muted" style="margin-top:8px;font-size:12px">Demo: the trip clock runs ' + d.demo_speed + '× faster so you can watch it progress.</div></div>';
+            if (d.status === 'DELIVERED') clearInterval(poll);
+          }).catch(function () { out.innerHTML = '<div class="card err">Could not reach the tracking service.</div>'; });
+        };
+        out.innerHTML = '<p class="muted">Looking up ' + esc(id) + '…</p>';
+        load();
+        poll = setInterval(load, 4000);
+      }
+      function track(awb) {
+        if (/^BK/i.test(awb)) { booking(awb.toUpperCase()); return; }
+        clearInterval(poll);
+        out.innerHTML = '<p class="muted">Looking up ' + esc(awb) + '…</p>';
+        history.replaceState(null, '', '?awb=' + encodeURIComponent(awb));
+        fetch('/v1/public/track?awb=' + encodeURIComponent(awb)).then(function (r) { return r.json().then(function (d) { return { ok: r.ok, d: d }; }); }).then(function (x) {
+          if (!x.ok) { out.innerHTML = '<div class="card err">' + esc(x.d.message) + '</div>'; return; }
+          var d = x.d, b = d.brand;
+          if (/^#[0-9a-f]{6}$/i.test(b.color)) document.documentElement.style.setProperty('--brand', b.color);
+          document.getElementById('brand').textContent = b.name;
+          document.getElementById('banner').textContent = b.banner || '';
+          document.title = 'Track order · ' + b.name;
+          var stage = STAGE[d.status] || 0;
+          out.innerHTML =
+            '<div class="card"><div class="muted">AWB ' + esc(d.awb) + ' · ' + esc(d.courier) + '</div><div class="status">' + esc(LABEL[d.status] || d.status) + '</div>' +
+            (d.status !== 'DELIVERED' && d.edd ? '<div class="muted">Expected by ' + new Date(d.edd).toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' }) + (d.delayed ? ' · <b class="err">running late</b>' : '') + '</div>' : '') +
+            '<div class="bar">' + [0, 1, 2, 3].map(function (i) { return '<i class="' + (i <= stage ? 'on' : '') + '"></i>'; }).join('') + '</div>' +
+            '<div class="steps"><span>Placed</span><span>Packed</span><span>In transit</span><span>Delivered</span></div>' +
+            '<p class="muted">Delivering to ' + esc(d.destination) + '</p></div>' +
+            (d.products.length ? '<div class="card"><b>Your items</b><div class="muted">' + d.products.map(function (p) { return esc(p.name) + ' × ' + p.qty; }).join('<br>') + '</div></div>' : '') +
+            '<div class="card"><b>Updates</b><ol style="margin-top:12px">' + d.timeline.map(function (t) { return '<li><b>' + esc(LABEL[t.status] || t.status) + '</b><div class="muted">' + fmt(t.at) + (t.location ? ' · ' + esc(t.location) : '') + '</div></li>'; }).join('') + '</ol></div>' +
+            (d.can_rate ? '<form class="card" id="rate"><b>How was your delivery?</b><div class="starsIn" role="radiogroup" aria-label="Rating">' + [1, 2, 3, 4, 5].map(function (n) { return '<button type="button" data-n="' + n + '" aria-label="' + n + ' star' + (n > 1 ? 's' : '') + '">★</button>'; }).join('') + '</div>' +
+              '<input name="comment" placeholder="Tell us more (optional)" maxlength="300"><button class="send">Send rating</button><p class="muted" id="rateMsg"></p></form>' : '') +
+            (d.feedback ? '<div class="card"><b>Thanks for rating!</b><div class="muted">' + '★'.repeat(d.feedback.rating) + '☆'.repeat(5 - d.feedback.rating) + '</div></div>' : '') +
+            (d.recommendations.length ? '<div class="card"><b>You might also like</b><div class="recs">' + d.recommendations.map(function (p) {
+              return '<a class="rec" ' + (p.url ? 'href="' + esc(p.url) + '" target="_blank" rel="noopener"' : '') + '><span>' + esc(p.name) + '</span><b>₹' + Number(p.price).toLocaleString('en-IN') + '</b></a>'; }).join('') + '</div></div>' : '') +
+            (d.status === 'DELIVERED' ? '<div class="card"><b>Need to return or exchange?</b><div class="muted"><a href="/returns/" style="color:var(--brand);font-weight:700">Start a return →</a></div></div>' : '') +
+            (b.support_phone || b.support_email ? '<div class="card"><b>Need help?</b><div class="muted">' + [b.support_phone && 'Call ' + esc(b.support_phone), b.support_email && 'Email ' + esc(b.support_email)].filter(Boolean).join(' · ') + '</div></div>' : '');
+          var rate = document.getElementById('rate');
+          if (rate) {
+            var stars = 0;
+            rate.querySelectorAll('[data-n]').forEach(function (s) { s.addEventListener('click', function () { stars = Number(s.dataset.n); rate.querySelectorAll('[data-n]').forEach(function (x) { x.classList.toggle('on', Number(x.dataset.n) <= stars); }); }); });
+            rate.addEventListener('submit', function (e) {
+              e.preventDefault();
+              if (!stars) { document.getElementById('rateMsg').textContent = 'Tap a star first.'; return; }
+              fetch('/v1/public/track/feedback', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ awb: d.awb, rating: stars, comment: rate.comment.value }) })
+                .then(function (r) { return r.json().then(function (x) { if (!r.ok) throw new Error(x.message); }); })
+                .then(function () { rate.outerHTML = '<div class="card"><b>Thanks for rating!</b><div class="muted">' + '★'.repeat(stars) + '☆'.repeat(5 - stars) + '</div></div>'; })
+                .catch(function (err) { document.getElementById('rateMsg').textContent = err.message; });
+            });
+          }
+        }).catch(function () { out.innerHTML = '<div class="card err">Could not reach the tracking service. Try again.</div>'; });
+      }
+      document.getElementById('f').addEventListener('submit', function (e) { e.preventDefault(); track(e.target.awb.value.trim()); });
+      var params = new URLSearchParams(location.search);
+      var q = params.get('id') || params.get('awb');
+      if (q) { document.querySelector('input[name=awb]').value = q; track(q); }
+    })();
+  </script>
+</body>
+</html>
