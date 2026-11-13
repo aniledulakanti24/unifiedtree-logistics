@@ -1,5 +1,7 @@
 name: Deploy to GitHub Pages
 
+# Builds the whole app for Pages: the website, customer app and partner app, with the API
+# running inside each visitor's browser (see tools/build-pages.js).
 on:
   push:
     branches: ["master"]
@@ -24,13 +26,30 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
       - name: Setup Pages
+        id: pages
         uses: actions/configure-pages@v5
+
+      - name: Build the site with the in-browser API
+        run: node tools/build-pages.js
+        env:
+          # The Pages path, e.g. /unifiedtree-logistics (empty for a custom domain).
+          PAGES_BASE: ${{ steps.pages.outputs.base_path }}
+
+      - name: Check the built scripts
+        run: |
+          node --check _site/ut-api.js
+          node --check _site/ut-api-sw.js
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: './public'
+          path: './_site'
 
       - name: Deploy to GitHub Pages
         id: deployment

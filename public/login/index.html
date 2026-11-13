@@ -240,9 +240,9 @@
 (function () {
   'use strict';
   var DEMOS = {
-    personal: { mobile: '9000000101', profile: { account_type: 'personal', name: 'Asha Rao', email: 'asha.demo@utlog.in' } },
+    personal: { mobile: '9000000101', profile: { account_type: 'personal', name: 'Asha Rao', email: 'asha.demo@utlog.in', workspace: { focus: 'everyday' } } },
     business: { mobile: '9000000102', profile: { account_type: 'business', name: 'Vikram Mehta', email: 'vikram.demo@utlog.in', company: 'Mehta Traders', business_address: { line: '14, Mamulpet Main Road, Chickpet', city: 'Bengaluru', pincode: '560053' } } },
-    logistics: { mobile: '9000000103', profile: { account_type: 'business', name: 'Sana Khan', email: 'sana.demo@utlog.in', company: 'Swift Movers', business_address: { line: '3rd Floor, 80 Feet Road, Koramangala 4th Block', city: 'Bengaluru', pincode: '560034' } }, land: '/app/#/logistics' },
+    logistics: { mobile: '9000000103', profile: { account_type: 'business', name: 'Sana Khan', email: 'sana.demo@utlog.in', company: 'Swift Movers', business_address: { line: '3rd Floor, 80 Feet Road, Koramangala 4th Block', city: 'Bengaluru', pincode: '560034' }, workspace: { focus: 'freight' } }, land: '/app/#/logistics' },
   };
   var err = document.getElementById('demoErr');
   function post(path, body, token) {
