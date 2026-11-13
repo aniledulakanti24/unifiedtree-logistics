@@ -186,7 +186,7 @@ module.exports = function register(routes, { send, sessions, users, setApiKeyRes
     if (!user.mobile && !user.email) return bad(res, 'Add a mobile number or email first.');
     user.twofa_pending = String(crypto.randomInt(0, 1e6)).padStart(6, '0');
     console.log(`[2fa-setup] ${user.key} -> ${user.twofa_pending}`);
-    send(res, 200, { sent_to: user.mobile ? '+91 ••••••' + user.mobile.slice(-4) : user.email, ...(process.env.NODE_ENV !== 'production' && { dev_otp: user.twofa_pending }) });
+    send(res, 200, { sent_to: user.mobile ? '+91 ••••••' + user.mobile.slice(-4) : user.email, ...((process.env.NODE_ENV !== 'production' || process.env.UT_SANDBOX === '1') && { dev_otp: user.twofa_pending }) });
   });
   routes['POST /v1/security/2fa/confirm'] = seller(({ res, user, body }) => {
     if (!user.twofa_pending || String(body.otp) !== user.twofa_pending) return bad(res, 'That code is incorrect.');

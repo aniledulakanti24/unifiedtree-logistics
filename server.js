@@ -11,7 +11,9 @@ const store = require('./server/store');
 try { if (process.loadEnvFile) process.loadEnvFile(path.join(__dirname, '.env')); } catch (e) { /* no .env yet: demo mode */ }
 
 const PORT = Number(process.env.PORT) || 3000;
-const DEV = process.env.NODE_ENV !== 'production';
+// Sandbox: sign-in codes are shown on screen because no SMS provider is connected yet.
+// UT_SANDBOX=1 keeps that on a hosted demo even when NODE_ENV is production.
+const DEV = process.env.NODE_ENV !== 'production' || process.env.UT_SANDBOX === '1';
 const ROOT = path.join(__dirname, 'public');
 
 const MIME = {

@@ -1,0 +1,28 @@
+# Render Blueprint: runs the whole UT Log app (website, customer app, partner app and API).
+# In Render: New > Blueprint > pick this repository. Free plan: data resets when the server restarts.
+services:
+  - type: web
+    name: ut-log
+    runtime: node
+    plan: free
+    region: singapore
+    branch: master
+    buildCommand: echo "No build step. UT Log has no dependencies."
+    startCommand: node server.js
+    healthCheckPath: /
+    autoDeploy: true
+    envVars:
+      - key: NODE_ENV
+        value: production
+      # Shows sign-in codes on screen and enables the demo accounts. Remove once an SMS provider is connected.
+      - key: UT_SANDBOX
+        value: "1"
+      - key: NODE_VERSION
+        value: "22"
+      # Optional. Set these in the Render dashboard, never in this file.
+      - key: GOOGLE_MAPS_API_KEY
+        sync: false
+      - key: SUPPORT_PHONE
+        sync: false
+      - key: SUPPORT_EMAIL
+        sync: false

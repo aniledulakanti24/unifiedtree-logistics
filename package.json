@@ -1,0 +1,14 @@
+{
+  "name": "ut-log",
+  "version": "1.0.0",
+  "private": true,
+  "description": "UT Log: compare and book delivery fleets, couriers, travel and bills from one wallet.",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=20.12"
+  },
+  "license": "UNLICENSED"
+}

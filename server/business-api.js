@@ -4,7 +4,7 @@
 const crypto = require('crypto');
 const wa = require('./whatsapp');
 
-const PUBLIC_URL = () => process.env.PUBLIC_URL || 'http://localhost:3000';
+const PUBLIC_URL = () => process.env.PUBLIC_URL || process.env.RENDER_EXTERNAL_URL || 'http://localhost:3000';
 const newId = (p) => p + Date.now().toString(36).toUpperCase().slice(-5) + crypto.randomBytes(2).toString('hex').toUpperCase();
 const inr = (n) => `₹${Math.round(n).toLocaleString('en-IN')}`;
 const trackUrl = (d) => `${PUBLIC_URL()}/track/?id=${d.booking_id || d.id}`;
