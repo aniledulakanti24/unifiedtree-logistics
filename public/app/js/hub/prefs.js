@@ -52,6 +52,37 @@ export async function setAccountType(type) {
   store.set({ accountType: type });
   await api('/hub/profile', { method: 'POST', body: { account_type: type } });
 }
+// Business accounts: company name and business address. The address becomes the default pickup.
+export function askBusinessDetails() {
+  const p = store.state.profile || {}; const a = p.business_address || {};
+  return modal({
+    title: 'Your business details',
+    body: `<p class="muted notop">We use this address as the pickup point when you book, and on your GST invoices. You can change it later in My profile.</p>
+      <form class="form-grid" id="bdF" novalidate>
+        <label class="field full">Company name<input class="input" name="company" value="${esc(p.company || '')}" autocomplete="organization"></label>
+        <label class="field full">Business address<textarea class="input" name="line" rows="2" placeholder="Building, street, area" autocomplete="street-address">${esc(a.line || '')}</textarea></label>
+        <label class="field">City<input class="input" name="city" value="${esc(a.city || '')}" autocomplete="address-level2"></label>
+        <label class="field">Pin code<input class="input" name="pincode" inputmode="numeric" maxlength="6" value="${esc(a.pincode || '')}" autocomplete="postal-code"></label>
+        <p class="form-error full" id="bdErr"></p>
+      </form>`,
+    footer: '<button class="btn btn-outline" data-close type="button">Later</button><button class="btn btn-primary" id="bdGo" type="button">Save</button>',
+    onMount(el, close) {
+      const f = el.querySelector('#bdF');
+      const go = async () => {
+        el.querySelector('#bdErr').textContent = '';
+        try {
+          const saved = await api('/hub/profile', { method: 'POST', body: { company: f.company.value.trim(), business_address: { line: f.line.value.trim(), city: f.city.value.trim(), pincode: f.pincode.value.trim() } } });
+          store.set({ profile: { ...(store.state.profile || {}), ...saved } });
+          toast('Business details saved');
+          close(true);
+        } catch (x) { el.querySelector('#bdErr').textContent = x.message; }
+      };
+      el.querySelector('#bdGo').addEventListener('click', go);
+      f.addEventListener('submit', (e) => { e.preventDefault(); go(); });
+      setTimeout(() => f.company.value ? f.line.focus() : f.company.focus(), 50);
+    },
+  });
+}
 // First-run question: what will you mostly use the platform for?
 export function askAccountType() {
   return modal({

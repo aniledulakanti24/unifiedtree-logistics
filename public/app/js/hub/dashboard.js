@@ -5,6 +5,8 @@ import { icon } from './icons.js';
 import { bars, hbars, statusPill, SECTION_ICON } from './ui.js';
 import { smartAction } from '../palette.js';
 import { applyWidgets, customise } from './experience.js';
+import { dateRangeField, mountDateRange, toApi, resolve } from './daterange.js';
+import { pathOn, focusLabel, hiddenCount, workspace, MODULES } from './workspace.js';
 
 const read = (k, d) => { try { const v = localStorage.getItem(k); return v == null ? d : JSON.parse(v); } catch (e) { return d; } };
 const write = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} };
@@ -13,7 +15,9 @@ const SERVICES = [
   ['Travel', [['Flights', 'plane', '#/travel/flights', 'blue'], ['Trains', 'train', '#/travel/trains', 'green'], ['Buses', 'bus', '#/travel/buses', 'coral'], ['Hotels', 'hotel', '#/travel/hotels', 'violet'], ['Rides', 'ride', '#/rides', 'amber']]],
   ['Pay', [['Mobile', 'phone', '#/pay/mobile', 'green'], ['FASTag', 'fastag', '#/pay/fastag', 'coral'], ['Bills', 'bill', '#/pay/bills', 'blue'], ['Send money', 'rupee', '#/pay/send', 'violet'], ['Wallet', 'wallet', '#/wallet', 'amber']]],
 ];
-const HINTS = ['5 kg from 560034 to 400053', '200 kg from Koramangala to Whitefield', 'flight from Bengaluru to Delhi', 'hotel in Goa', 'recharge 9876543210'];
+// Example searches, each tied to the service it opens, so only workspace services are suggested.
+const ALL_HINTS = [['200 kg from Koramangala to Whitefield', '#/vehicle'], ['5 kg from 560034 to 400053', '#/courier'], ['2 tonnes from Bengaluru to Chennai', '#/logistics'], ['10 kg to Dubai', '#/international'], ['flight from Bengaluru to Delhi', '#/travel/flights'], ['hotel in Goa', '#/travel/hotels'], ['recharge 9876543210', '#/pay/mobile'], ['bike from Indiranagar to MG Road', '#/vehicle']];
+const hints = () => { const h = ALL_HINTS.filter(([, path]) => pathOn(path)).map(([t]) => t); return h.length ? h : ALL_HINTS.map(([t]) => t); };
 // Original illustration: a helper bot with chat bubbles and service badges. Motion is CSS, off for reduced motion.
 const BOT = `<svg class="hero__bot" viewBox="0 0 340 230" aria-hidden="true">
   <defs>
@@ -99,12 +103,22 @@ function spark(values) {
   return `<div class="stat-spark"><svg viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" aria-hidden="true"><defs><linearGradient id="${id}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#2a78d6" stop-opacity=".2"/><stop offset="1" stop-color="#2a78d6" stop-opacity="0"/></linearGradient></defs><path class="a" fill="url(#${id})" d="${d} L${w} ${h} L0 ${h}Z"/><path class="l" d="${d}" vector-effect="non-scaling-stroke"/></svg></div>`;
 }
 const kpiCard = (k) => `<a class="card kpi-card" href="${esc(k.href)}"><div class="stat-top"><span class="stat-ico">${icon(k.icon, 16)}</span><span>${esc(k.label)}</span></div><div class="stat-mid"><span class="stat-value" translate="no">${esc(fmt(k))}</span>${delta(k)}</div><span class="stat-note">${esc(k.note || '')}</span>${k.bar != null ? `<span class="stat-bar stat-bar--${k.barTone}" role="img" aria-label="${k.bar}%"><i style="width:${Math.max(2, k.bar)}%"></i></span>` : spark(k.spark)}</a>`;
+// One-time note for accounts that had every service before the workspace existed.
+function wsNote() {
+  const w = workspace();
+  if (!w || !w.auto || read('ut-ws-note', false)) return '';
+  const names = w.on.map((k) => (MODULES.find((m) => m.key === k) || {}).label).filter(Boolean);
+  return `<section class="card ws-note" id="wsNote"><span class="ws-note__ico">${icon('sparkle', 18)}</span><div class="grow"><b>Your sidebar now shows what you use</b><small>${esc(names.slice(0, 4).join(', '))}${names.length > 4 ? ` and ${names.length - 4} more` : ''}. ${hiddenCount()} other services are one click away.</small></div><a class="btn btn-outline btn-sm" href="#/workspace">Choose services</a><button class="btn btn-ghost btn-sm" type="button" data-ws-ok>Got it</button></section>`;
+}
 const TONE_ICON = { bad: 'alert', warn: 'alert', info: 'info', good: 'check' };
 
 export async function render(view) {
-  const days = read('ut-ov-days', 30);
+  const old = { 7: 'last7', 30: 'last30', 90: 'thisq' }[read('ut-ov-days', 0)];
+  let range = read('ut-ov-range', old || 'last30');
+  if (range === 'all') range = 'last30';
+  const rng = resolve(range);
   view.innerHTML = '<div class="skeleton" style="height:120px;margin-bottom:14px"></div><div class="kpis">' + '<div class="skeleton" style="height:140px"></div>'.repeat(8) + '</div>';
-  const d = await api('/hub/overview', { query: { days } });
+  const d = await api('/hub/overview', { query: toApi(range) });
   const p = store.state.profile || {};
   const who = p.account_type === 'business' && p.company ? p.company : (p.name || 'Your account');
   const first = (p.name || '').split(' ')[0];
@@ -112,9 +126,10 @@ export async function render(view) {
   const gsHidden = read('ut-gs-hide', false);
   const nextStep = d.start.steps.find((s) => !s.done);
   view.innerHTML = `
-    <div class="ov-head"><div><h1>Overview</h1><p>${esc(who)} · ${esc(today)}</p></div>
-      <div class="ov-tools"><select class="select" id="per" aria-label="Period">${[[7, 'Last 7 days'], [30, 'Last 30 days'], [90, 'Last 90 days']].map(([v, l]) => `<option value="${v}" ${v === d.days ? 'selected' : ''}>${l}</option>`).join('')}</select>
+    <div class="ov-head"><div><h1>Overview</h1><p>${esc(who)} · ${esc(today)}${workspace() ? ` · <a class="ws-chip" href="#/workspace" title="Change what you see">${icon('dashboard', 13)}${esc(focusLabel())}</a>` : ''}</p></div>
+      <div class="ov-tools">${dateRangeField(range)}
         <button class="btn btn-outline" id="print" type="button">${icon('printer', 16)}Print or PDF</button><button class="btn btn-primary" id="custom" type="button">${icon('sliders', 16)}Customize</button></div></div>
+    ${wsNote()}
     ${nextStep && !gsHidden ? `<section class="card gs-card"><span class="gs-ico">${icon('rocket', 20)}</span><div class="gs-main"><b>Getting started: ${d.start.done} of ${d.start.total} done</b><small>Next: ${esc(nextStep.label)}.</small><div class="gs-bar"><i style="width:${(d.start.done / d.start.total) * 100}%"></i></div></div><a class="btn btn-primary" href="${esc(nextStep.href)}">Continue</a><button class="btn" id="gsHide" type="button">Hide</button>
       <div class="gs-steps">${d.start.steps.map((s) => `<a href="${esc(s.href)}" class="${s.done ? 'done' : ''}">${s.done ? icon('check', 14) : ''}${esc(s.label)}</a>`).join('')}</div></section>` : ''}
     <section class="hero" data-w="ask">
@@ -122,16 +137,16 @@ export async function render(view) {
       <div class="hero__main">
         <p class="hero__k">${esc(greeting())}${first ? `, ${esc(first)}` : ''}</p>
         <h1>What do you need today?</h1>
-        <form class="hero__search" id="smart" role="search"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3 1.900 5.600L19.500 10l-5.600 1.900L12 17.500l-1.900-5.600L4.500 10l5.600-1.400z"/></svg><input id="smartQ" autocomplete="off" aria-label="Tell us what you need" placeholder="Try: ${esc(HINTS[0])}"><button class="btn" type="submit">Go</button></form>
+        <form class="hero__search" id="smart" role="search"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3 1.900 5.600L19.500 10l-5.600 1.900L12 17.500l-1.900-5.600L4.500 10l5.600-1.400z"/></svg><input id="smartQ" autocomplete="off" aria-label="Tell us what you need" placeholder="Try: ${esc(hints()[0])}"><button class="btn" type="submit">Go</button></form>
         <p class="hero__err" id="smartErr" role="status"></p>
-        <div class="hero__chips">${HINTS.slice(1).map((h) => `<button type="button" data-hint="${esc(h)}">${esc(h)}</button>`).join('')}</div>
+        <div class="hero__chips">${hints().slice(0, 4).map((h) => `<button type="button" data-hint="${esc(h)}">${esc(h)}</button>`).join('')}</div>
       </div>
       ${BOT}
     </section>
-    <p class="ov-note">Compared with the ${d.days} days before. Active orders, wallet and to-dos always show today's position.</p>
+    <p class="ov-note">Compared with the ${d.days === 1 ? 'day' : `${d.days} days`} before. Active orders, wallet and to-dos always show today's position.</p>
     <div class="kpis" data-w="kpi">${d.kpis.map(kpiCard).join('')}</div>
     <div class="ov-2">
-      <section class="card" data-w="insights"><div class="card-h"><div><h2>What the numbers say</h2><small>Last ${d.days} days, from your records</small></div><a class="link" href="#/insights">View all</a></div>
+      <section class="card" data-w="insights"><div class="card-h"><div><h2>What the numbers say</h2><small>${esc(rng.label)}, from your records</small></div><a class="link" href="#/insights">View all</a></div>
         ${d.insights.length ? `<ul class="ins-list">${d.insights.map((i) => `<li class="tone-${i.tone}">${icon(TONE_ICON[i.tone], 17)}<a href="${esc(i.href)}">${esc(i.text)}</a></li>`).join('')}</ul>` : `<div class="ov-empty">${icon('check', 26)}Nothing unusual. Everything is on track.</div>`}</section>
       <section class="card" data-w="attention"><div class="card-h"><h2>Needs attention</h2></div>
         ${d.attention.length ? `<ul class="att-list">${d.attention.map((a) => `<li><a href="${esc(a.href)}"><span class="ico">${icon(a.icon === 'returnbox' ? 'returnbox' : a.icon, 16)}</span><span class="grow"><b>${a.count}</b>${esc(a.text)}</span>${icon('chevron', 16).replace('class="li"', 'class="li chev"')}</a></li>`).join('')}</ul>` : `<div class="ov-empty">${icon('check', 26)}Nothing needs you right now.</div>`}</section>
@@ -139,12 +154,13 @@ export async function render(view) {
     <div class="ov-2">
       <section class="card" data-w="todo"><div class="card-h"><div><h2>What to do first</h2><small>Ranked by urgency, using fixed rules</small></div></div>
         ${d.todo.length ? `<ul class="todo-list">${d.todo.map((t) => `<li><a href="${esc(t.href)}"><span class="ico">${icon(t.icon, 16)}</span><span class="grow"><b>${esc(t.title)}</b><small>${esc(t.sub)}</small></span>${icon('chevron', 16).replace('class="li"', 'class="li chev"')}</a></li>`).join('')}</ul>` : `<div class="ov-empty">${icon('check', 26)}You are all caught up.</div>`}</section>
-      <section class="card" data-w="services"><div class="card-h"><div><h2>Book or pay</h2><small>Every service in one place</small></div></div>
-        ${SERVICES.map(([g, list]) => `<div class="ov-svc-group"><small>${esc(g)}</small><div class="ov-svc">${list.map(([l, i, h, t]) => `<a href="${h}">${tile(i, t).value}<span>${esc(l)}</span></a>`).join('')}</div></div>`).join('')}</section>
+      <section class="card" data-w="services"><div class="card-h"><div><h2>Book or pay</h2><small>Services in your workspace · one place</small></div></div>
+        ${SERVICES.map(([g, list]) => [g, list.filter((x) => pathOn(x[2]) || x[2] === '#/wallet')]).filter(([, list]) => list.length > (list.some((x) => x[2] === '#/wallet') ? 1 : 0)).map(([g, list]) => `<div class="ov-svc-group"><small>${esc(g)}</small><div class="ov-svc">${list.map(([l, i, h, t]) => `<a href="${h}">${tile(i, t).value}<span>${esc(l)}</span></a>`).join('')}</div></div>`).join('')}</section>
+        ${hiddenCount() ? `<a class="ws-more" href="#/workspace">${icon('plus', 16)}Add services <small>${hiddenCount()} more available</small></a>` : ''}
     </div>
     <div class="ov-2">
       <section class="card" data-w="charts"><div class="card-h"><div><h2>Daily spend</h2><small>Last ${d.series.length} days</small></div><a class="link" href="#/insights">Insights</a></div><div id="spendBars"></div></section>
-      <section class="card" data-w="mix"><div class="card-h"><div><h2>Spend by service</h2><small>Last ${d.days} days</small></div></div>${d.by_service.length ? hbars(d.by_service) : '<div class="ov-empty">Spend appears after your first booking.</div>'}</section>
+      <section class="card" data-w="mix"><div class="card-h"><div><h2>Spend by service</h2><small>${esc(rng.label)}</small></div></div>${d.by_service.length ? hbars(d.by_service) : '<div class="ov-empty">Spend appears after your first booking.</div>'}</section>
     </div>
     <div class="ov-2">
       <section class="card" data-w="recent"><div class="card-h"><h2>Recent activity</h2><a class="link" href="#/my/orders?scope=all&days=">View all</a></div>
@@ -154,7 +170,9 @@ export async function render(view) {
     </div>`;
   bars(view.querySelector('#spendBars'), d.series, 'Daily spend');
   applyWidgets(view);
-  view.querySelector('#per').addEventListener('change', (e) => { write('ut-ov-days', Number(e.target.value)); render(view); });
+  mountDateRange(view.querySelector('.ov-tools'), range, (v) => { write('ut-ov-range', v); render(view); }, { allowAll: false });
+  const wn = view.querySelector('#wsNote');
+  if (wn) wn.addEventListener('click', (e) => { if (e.target.closest('[data-ws-ok]')) { write('ut-ws-note', true); wn.remove(); const w = workspace(); api('/hub/profile', { method: 'POST', body: { workspace: { focus: w.focus, on: w.on } } }).then((p) => store.set({ profile: { ...(store.state.profile || {}), ...p } })).catch(() => {}); } });
   view.querySelector('#print').addEventListener('click', () => window.print());
   view.querySelector('#custom').addEventListener('click', () => customise(view));
   const hide = view.querySelector('#gsHide');
@@ -165,6 +183,6 @@ export async function render(view) {
   view.querySelector('.hero__chips').addEventListener('click', (e) => { const b = e.target.closest('[data-hint]'); if (b) { q.value = b.dataset.hint; go(b.dataset.hint); } });
   // Rotating example, paused while the box is in use.
   let n = 0;
-  const timer = setInterval(() => { if (document.activeElement !== q && !q.value) { n = (n + 1) % HINTS.length; q.placeholder = `Try: ${HINTS[n]}`; } }, 3200);
+  const timer = setInterval(() => { if (document.activeElement !== q && !q.value) { const hs = hints(); n = (n + 1) % hs.length; q.placeholder = `Try: ${hs[n]}`; } }, 3200);
   return () => clearInterval(timer);
 }

@@ -74,7 +74,8 @@ export async function createMap(el, { center = INDIA, zoom = 5 } = {}) {
 }
 
 // Address details for a point: Google's geocoder when available, plus our serviceable area.
-async function describe(p) {
+export async function describe(p) {
+  if (!config) await mapProvider();
   const near = await api('/hub/geo/reverse', { method: 'POST', body: { lat: p[0], lng: p[1] } });
   let address = near.area ? `Near ${near.area}, ${near.city}` : `Near pin code ${near.pincode}`;
   let { pincode } = near;

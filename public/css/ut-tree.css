@@ -1,0 +1,114 @@
+/* UT tree animation. Colours are variables so it sits on light pages, the dark login panel and the app. */
+.ut-tree {
+  --utt-speed: 1;
+  --utt-trunk: #2f4a3f; --utt-trunk-hi: #4c6d5f; --utt-branch: #3b5d4f; --utt-twig: #5d8a76;
+  --utt-leaf-0: #22a07f; --utt-leaf-1: #57c39f; --utt-leaf-2: #9adbc0;
+  --utt-root: #b98c5f; --utt-ground: #d9e6e0;
+  --utt-node-bg: #ffffff; --utt-node-ring: rgba(14, 124, 102, .16); --utt-node-ink: #0e7c66; --utt-label: #1f2937;
+  --utt-pulse: #ff5722; --utt-pill: #ffffff; --utt-pill-line: #dbe7e2; --utt-pill-ink: #334155;
+  position: relative; width: 100%;
+}
+.ut-tree__svg { display: block; width: 100%; height: auto; overflow: visible; }
+.ut-tree--login {
+  --utt-trunk: #cfe9df; --utt-trunk-hi: #8fc9b5; --utt-branch: #a9dcc9; --utt-twig: #7fd6bf;
+  --utt-leaf-0: #2db596; --utt-leaf-1: #7fd6bf; --utt-leaf-2: #c6f0e2; --utt-root: #6c8f84; --utt-ground: rgba(255, 255, 255, .14);
+  --utt-node-bg: #183a34; --utt-node-ring: rgba(127, 214, 191, .25); --utt-node-ink: #c6f0e2; --utt-label: #dfeae7; --utt-pulse: #ffb38f;
+}
+.ut-tree--boot { --utt-speed: .45; }
+
+/* Lines draw in. pathLength="1" on each path makes the dash maths simple. */
+.ut-tree .utt-draw { fill: none; stroke-linecap: round; stroke-dasharray: 1; stroke-dashoffset: 1; stroke-opacity: 0; }
+.ut-tree.is-growing .utt-draw { animation: uttDraw calc(.9s * var(--utt-speed)) cubic-bezier(.55, .1, .25, 1) calc(var(--d, 0s) * var(--utt-speed)) forwards; }
+.utt-ground { stroke: var(--utt-ground); stroke-width: 2; }
+.utt-root { stroke: var(--utt-root); opacity: .75; }
+.utt-trunk-w { stroke: var(--utt-trunk); stroke-width: 18; }
+.utt-trunk-hi { stroke: var(--utt-trunk-hi); stroke-width: 4; opacity: .7; }
+.utt-branch { stroke: var(--utt-branch); }
+.utt-twig { stroke: var(--utt-twig); stroke-width: 2.4; }
+.ut-tree.is-growing .utt-trunk-w { animation-duration: calc(1.1s * var(--utt-speed)); }
+.ut-tree.is-growing .utt-branch { animation-duration: calc(1s * var(--utt-speed)); }
+
+/* Leaves pop in, then sway a little. */
+.utt-leaf { transform: scale(0); transform-box: view-box; }
+.utt-leaf--0 { fill: var(--utt-leaf-0); } .utt-leaf--1 { fill: var(--utt-leaf-1); } .utt-leaf--2 { fill: var(--utt-leaf-2); }
+.ut-tree.is-growing .utt-leaf { animation: uttLeaf calc(.55s * var(--utt-speed)) cubic-bezier(.34, 1.56, .64, 1) calc(var(--d) * var(--utt-speed)) forwards; }
+.ut-tree.is-growing .utt-cluster { animation: uttSway 5.5s ease-in-out calc(var(--d) * var(--utt-speed) + 1s) infinite; transform-box: view-box; }
+.ut-tree.is-growing .utt-cluster:nth-child(even) { animation-duration: 6.4s; animation-direction: reverse; }
+
+/* Service nodes and root labels. */
+.utt-node, .utt-rootlabel { opacity: 0; }
+.utt-node__in { transform: scale(.4); transition: transform .2s; }
+.ut-tree.is-growing .utt-node, .ut-tree.is-growing .utt-rootlabel { animation: uttFade calc(.4s * var(--utt-speed)) ease-out calc(var(--d) * var(--utt-speed)) forwards; }
+.ut-tree.is-growing .utt-node__in { animation: uttPop calc(.6s * var(--utt-speed)) cubic-bezier(.34, 1.56, .64, 1) calc(var(--d) * var(--utt-speed)) forwards; }
+.utt-node__ring { fill: var(--utt-node-ring); }
+.utt-node__bg { fill: var(--utt-node-bg); stroke: var(--utt-node-ink); stroke-width: 1.5; filter: drop-shadow(0 4px 10px rgba(15, 41, 37, .14)); }
+.utt-node__ic { fill: none; stroke: var(--utt-node-ink); stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }
+.utt-node__t { fill: var(--utt-label); font: 600 14px/1 Inter, system-ui, sans-serif; }
+.utt-bud { fill: var(--utt-leaf-1); }
+a.utt-node { cursor: pointer; outline: none; }
+a.utt-node:hover .utt-node__bg, a.utt-node:focus-visible .utt-node__bg { fill: var(--utt-node-ink); }
+a.utt-node:hover .utt-node__ic, a.utt-node:focus-visible .utt-node__ic { stroke: var(--utt-node-bg); }
+a.utt-node:focus-visible .utt-node__ring { stroke: var(--utt-node-ink); stroke-width: 2; }
+.utt-rootlabel rect { fill: var(--utt-pill); stroke: var(--utt-pill-line); }
+.utt-rootlabel text { fill: var(--utt-pill-ink); font: 600 13px/1 Inter, system-ui, sans-serif; }
+
+/* Parcels travelling from the roots to each service. */
+.utt-pulse { opacity: 0; transition: opacity .4s; }
+.utt-pulse.on { opacity: 1; }
+.utt-pulse__box { fill: var(--utt-pulse); }
+.utt-pulse__halo { fill: var(--utt-pulse); opacity: .22; }
+
+/* Round caps would show as dots before a line starts, so lines stay hidden until their turn. */
+@keyframes uttDraw { 0% { stroke-opacity: 0; } 2%, 100% { stroke-opacity: 1; } to { stroke-dashoffset: 0; } }
+@keyframes uttLeaf { to { transform: scale(1); } }
+@keyframes uttPop { to { transform: scale(1); } }
+@keyframes uttFade { to { opacity: 1; } }
+@keyframes uttSway { 50% { transform: rotate(2.2deg); } }
+
+@media (prefers-reduced-motion: reduce) {
+  .ut-tree .utt-draw { stroke-dashoffset: 0; stroke-opacity: 1; animation: none !important; }
+  .utt-leaf, .utt-node__in { transform: none; animation: none !important; }
+  .utt-node, .utt-rootlabel { opacity: 1; animation: none !important; }
+  .utt-cluster { animation: none !important; }
+  .utt-pulse { display: none; }
+}
+
+/* ---- Homepage band ---------------------------------------------------------------------- */
+.treeBand { position: relative; padding: 88px 0 72px; background: radial-gradient(900px 420px at 78% 40%, #e9f7f2 0%, rgba(233, 247, 242, 0) 70%), #fbfdfc; overflow: hidden; }
+.treeBand::before { content: ''; position: absolute; inset: auto 0 0 0; height: 1px; background: linear-gradient(90deg, transparent, #dbe7e2, transparent); }
+.treeBand__grid { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); gap: 48px; align-items: center; }
+.treeBand .kicker { margin: 0 0 12px; font-size: 12.5px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: #0e7c66; }
+.treeBand h2 { margin: 0 0 16px; font: 800 clamp(28px, 3.4vw, 42px)/1.12 'Plus Jakarta Sans', Inter, sans-serif; letter-spacing: -.02em; color: #0f172a; }
+.treeBand h2 span { color: #0e7c66; }
+.treeBand__lead { margin: 0 0 24px; font-size: 16.5px; line-height: 1.6; color: #475569; max-width: 46ch; }
+.treeBand__list { list-style: none; margin: 0 0 28px; padding: 0; display: grid; gap: 12px; }
+.treeBand__list li { display: grid; grid-template-columns: 12px minmax(0, 1fr); column-gap: 14px; align-items: baseline; padding: 12px 16px; border: 1px solid #e3ece8; border-radius: 12px; background: #fff; opacity: 0; transform: translateY(12px); transition: opacity .5s, transform .5s cubic-bezier(.2, .8, .2, 1), border-color .2s, box-shadow .2s; }
+.treeBand__list li::before { content: ''; grid-row: span 2; width: 10px; height: 10px; margin-top: 4px; border-radius: 50%; background: #b98c5f; box-shadow: 0 0 0 4px #f4ebe1; }
+.treeBand__list li:hover { border-color: #bfe3d6; box-shadow: 0 6px 18px rgba(15, 41, 37, .07); }
+.treeBand__list b { font-size: 15px; color: #0f172a; }
+.treeBand__list span { font-size: 14px; color: #64748b; }
+.treeBand.in .treeBand__list li { opacity: 1; transform: none; }
+.treeBand.in .treeBand__list li:nth-child(2) { transition-delay: .12s; }
+.treeBand.in .treeBand__list li:nth-child(3) { transition-delay: .24s; }
+.treeBand__cta { display: flex; flex-wrap: wrap; align-items: center; gap: 18px; }
+.treeBand__link { font-weight: 600; color: #0e7c66; text-decoration: none; }
+.treeBand__link:hover { text-decoration: underline; }
+.treeBand__art { position: relative; }
+.treeBand__hint { margin: 4px 0 0; text-align: center; font-size: 13px; color: #64748b; }
+@media (max-width: 900px) {
+  .treeBand { padding: 64px 0 52px; }
+  .treeBand__grid { grid-template-columns: minmax(0, 1fr); gap: 28px; }
+  .treeBand__art { order: -1; max-width: 560px; margin-inline: auto; width: 100%; }
+}
+@media (max-width: 520px) { .ut-tree--home .utt-node__t { font-size: 17px; } .ut-tree--home .utt-rootlabel text { font-size: 15px; } }
+@media (prefers-reduced-motion: reduce) { .treeBand__list li { opacity: 1; transform: none; } }
+/* Readable labels over leaves, and a soft canopy behind the branches. */
+.utt-node__t { paint-order: stroke; stroke: var(--utt-halo, #fbfdfc); stroke-width: 5px; stroke-linejoin: round; }
+.ut-tree--login .utt-node__t { --utt-halo: #0f2925; }
+.utt-canopy { opacity: 0; transform: scale(.6); transform-box: fill-box; transform-origin: 50% 80%; }
+.ut-tree.is-growing .utt-canopy { animation: uttCanopy calc(1.6s * var(--utt-speed)) ease-out calc(1.2s * var(--utt-speed)) forwards; }
+@keyframes uttCanopy { to { opacity: 1; transform: scale(1); } }
+@media (prefers-reduced-motion: reduce) { .utt-canopy { opacity: 1; transform: none; animation: none !important; } }
+/* Host pages may stroke every svg shape; the tree sets its own. */
+.ut-tree__svg { stroke: none; }
+.utt-canopy, .utt-leaf ellipse, .utt-bud, .utt-pulse__box, .utt-pulse__halo, .utt-node__ring { stroke: none !important; }

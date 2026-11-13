@@ -52,11 +52,17 @@ export function openTracking(id) {
       const eta = t.status === 'DELIVERED' ? 'Delivered' : mins < 90 ? `${mins} min away` : `By ${date(t.promised_by)}`;
       const otp = t.otp ? (t.otp.pickup ? ['Pickup OTP', t.otp.pickup] : ['Delivery OTP', t.otp.delivery]) : null;
       body.innerHTML = `<div class="trk-head"><div><b>${esc(t.label)}</b><small>${esc(r.provider)} · ${esc(r.sub)}</small></div><span class="trk-eta">${esc(eta)}</span></div>
-        ${t.driver ? `<div class="trk-driver">${duo('user').value}<div><b>${esc(t.driver.name)}</b><small>${esc(t.driver.vehicle_no)} · Rated ${esc(t.driver.rating)}</small></div><span class="spacer"></span><button class="btn btn-outline btn-sm" id="dChat" type="button">Chat</button><button class="btn btn-outline btn-sm" id="dCall" type="button">Call</button></div>` : ''}
+        ${t.driver ? `<div class="trk-driver">${duo('user').value}<div><b>${esc(t.driver.name)}</b><small>${esc(t.driver.vehicle_no)} · Rated ${esc(t.driver.rating)}</small><small class="trk-ver">${t.driver.partner ? '✓ UT partner · licence, RC and selfie checked' : `✓ Verified by ${esc(r.provider)}`}</small></div><span class="spacer"></span><button class="btn btn-outline btn-sm" id="dChat" type="button">Chat</button><button class="btn btn-outline btn-sm" id="dCall" type="button">Call</button></div>` : ''}
         ${otp ? `<div class="trk-otp"><small>${esc(otp[0])}</small><b class="mono" translate="no">${esc(otp[1])}</b><small>Share only when the rider is with you.</small></div>` : ''}
         <h2 class="mt">Timeline</h2><ol class="timeline">${t.timeline.map((e) => `<li><b>${esc(e.label)}</b><small class="muted block">${esc(dateTime(e.at))}</small></li>`).join('')}</ol>
-        ${r.proof ? `<section class="pod"><h2 class="notop">Proof of delivery</h2><div class="pod__img">${scene('delivery').value}</div><dl class="break"><div><dt>Received by</dt><dd>${esc(r.proof.received_by)}</dd></div><div><dt>OTP</dt><dd>Verified</dd></div><div><dt>Delivered</dt><dd>${esc(dateTime(r.proof.at))}</dd></div></dl><svg class="sign" viewBox="0 0 200 50" role="img" aria-label="Receiver signature"><path d="M6 34c14-26 22-26 22-8 0 14 8 10 16-4 6-10 12-8 10 2-2 12 10 8 20-4s16-8 12 4c-2 8 10 4 20-2s14-2 28-2 30-6 58-8"/></svg><small class="muted">Sample proof in this demo.</small></section>` : ''}<button class="btn btn-outline btn-block" id="share" type="button">Copy tracking link</button><p class="muted small">Demo clock: journeys run faster than real time.</p>`;
-      body.querySelector('#share').addEventListener('click', async () => { try { await navigator.clipboard.writeText(`${location.origin}/track/?id=${t.id}`); toast('Tracking link copied'); } catch (e) { toast(`${location.origin}/track/?id=${t.id}`); } });
+        ${r.proof ? `<section class="pod"><h2 class="notop">Proof of delivery</h2><div class="pod__img">${scene('delivery').value}</div><dl class="break"><div><dt>Received by</dt><dd>${esc(r.proof.received_by)}</dd></div><div><dt>OTP</dt><dd>Verified</dd></div><div><dt>Delivered</dt><dd>${esc(dateTime(r.proof.at))}</dd></div></dl><svg class="sign" viewBox="0 0 200 50" role="img" aria-label="Receiver signature"><path d="M6 34c14-26 22-26 22-8 0 14 8 10 16-4 6-10 12-8 10 2-2 12 10 8 20-4s16-8 12 4c-2 8 10 4 20-2s14-2 28-2 30-6 58-8"/></svg><small class="muted">Sample proof in this demo.</small></section>` : ''}<div class="trk-safe"><button class="btn btn-outline" id="share" type="button">Share live trip</button>${t.status !== 'DELIVERED' ? '<button class="btn btn-sos" id="sos" type="button">Safety</button>' : ''}</div><p class="muted small">Demo clock: journeys run faster than real time.</p>`;
+      const link = `${location.origin}/track/?id=${t.id}`;
+      body.querySelector('#share').addEventListener('click', async () => {
+        // Phones open the share sheet (WhatsApp, SMS); desktops copy the link.
+        if (navigator.share) { try { await navigator.share({ title: 'Track my UT Log trip', text: `${t.label} · ${r.provider}`, url: link }); return; } catch (e) { if (e.name === 'AbortError') return; } }
+        try { await navigator.clipboard.writeText(link); toast('Live trip link copied'); } catch (e) { toast(link); }
+      });
+      const sos = body.querySelector('#sos'); if (sos) sos.addEventListener('click', () => safetySheet(r, t, link));
       const dChat = body.querySelector('#dChat'); if (dChat) dChat.addEventListener('click', () => driverChat(r));
       const dCall = body.querySelector('#dCall'); if (dCall) dCall.addEventListener('click', async () => { const c = await api('/hub/orders/call', { method: 'POST', body: { id } }); toast(`Connecting through private number ${c.masked} (demo)`); });
       if (t.status !== 'DELIVERED') timer = setTimeout(load, 4000);
@@ -152,4 +158,28 @@ export function printReceipt(r) {
     <table><tr><td>Taxable value</td><td>${inr(taxable)}</td></tr><tr><td>GST (18%, indicative)</td><td>${inr(gross - taxable)}</td></tr>${r.discount ? `<tr><td>Coupon ${esc(r.coupon)}</td><td>−${inr(r.discount)}</td></tr>` : ''}${r.points_used ? `<tr><td>Reward points</td><td>−${inr(r.points_used)}</td></tr>` : ''}<tr class="t"><td>${r.pay_mode === 'cod' ? 'To pay on delivery' : 'Paid from wallet'}</td><td>${inr(r.amount)}</td></tr></table>
     <small>UT Log connects you with the service provider and keeps this record.</small><script>print()<\/script>`);
   w.document.close();
+}
+
+// Safety: emergency number, trusted contacts and the UT safety team, one tap each.
+function safetySheet(r, t, link) {
+  const contacts = (store.state.profile && store.state.profile.trusted) || [];
+  modal({
+    title: 'Safety',
+    body: `<a class="sos-row sos-row--red" href="tel:112"><span class="sos-ico">112</span><span class="grow"><b>Call emergency services</b><small>Police, ambulance and fire. Free from any phone.</small></span></a>
+      <button class="sos-row" type="button" data-k="contacts"><span class="sos-ico">${contacts.length || '+'}</span><span class="grow"><b>${contacts.length ? 'Send my live trip to trusted contacts' : 'Add trusted contacts'}</b><small>${contacts.length ? esc(contacts.map((c) => c.name).join(', ')) : 'Up to 3 people who get your live trip in one tap'}</small></span></button>
+      <button class="sos-row" type="button" data-k="team"><span class="sos-ico">UT</span><span class="grow"><b>Report to the UT safety team</b><small>Priority line, open 24 hours. We call you back within 5 minutes.</small></span></button>
+      <dl class="break sos-facts"><div><dt>Trip</dt><dd class="mono">${esc(t.id)}</dd></div>${t.driver ? `<div><dt>Driver</dt><dd>${esc(t.driver.name)} · ${esc(t.driver.vehicle_no)}</dd></div>` : ''}<div><dt>Status</dt><dd>${esc(t.label)}</dd></div></dl>
+      <p class="form-error" id="sosErr"></p>`,
+    onMount(el, close) {
+      el.addEventListener('click', async (e) => {
+        const b = e.target.closest('[data-k]'); if (!b) return;
+        if (b.dataset.k === 'contacts' && !contacts.length) { close(); location.hash = '#/profile?tab=safety'; return; }
+        b.disabled = true;
+        try {
+          const res = await api('/hub/safety/alert', { method: 'POST', body: { id: r.id, kind: b.dataset.k } });
+          b.outerHTML = `<div class="sos-done" role="status"><b>${b.dataset.k === 'team' ? `Alert ${esc(res.id)} raised` : 'Sent'}</b><small>${esc(res.message)}</small></div>`;
+        } catch (x) { b.disabled = false; el.querySelector('#sosErr').textContent = x.message; }
+      });
+    },
+  });
 }

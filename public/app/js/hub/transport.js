@@ -6,8 +6,9 @@ import { sortChips, tagBadges, star, payChoice, withFunds, refresh, mountDeals, 
 import { openTracking } from './tracking.js';
 import { smoothTo } from './motion.js';
 import { deskTabs, renderDeskBody } from './desk.js';
-import { payMethods, checkout, PAY_LABEL } from './checkout.js';
-import { openMapPicker } from './maps.js';
+import { payMethods, checkout, PAY_LABEL, BOOKING_PAY } from './checkout.js';
+import { openPlacePicker, placeChips, samePlace } from './places.js';
+import { icon } from './icons.js';
 
 export const SECTIONS = {
   vehicle: { title: 'Vehicle Transport', icon: 'bike', tone: 'green', by: 'location', intro: 'Bikes, autos and vans for small loads inside your city.', from: 'Where is your pickup?', to: 'Where is your drop?', providers: ['Rapido', 'Porter', 'Uber', 'Borzo', 'Local vehicle owners'], assigned: 'Rider assigned', newLabel: 'New booking' },
@@ -40,6 +41,11 @@ export async function render(view, { section, tab, query }) {
 }
 
 // ---- booking flow -----------------------------------------------------------------
+function placeButton(name, placeholder, cfg, value, place) {
+  const label = place ? (place.house || place.label) : value;
+  const sub = place ? [place.area && place.city ? `${place.area}, ${place.city}` : place.city, place.pincode].filter(Boolean).join(' · ') : value ? 'Tap to set the exact pin' : (name === 'from' ? 'Search, use your location or a saved place' : 'Search an area, street or pin code');
+  return `<input type="hidden" name="${name}" value="${esc(value || '')}"><button class="place-btn ${value ? 'is-set' : ''}" type="button" data-place="${name}" aria-label="${esc(placeholder)}${value ? `: ${esc(label)}` : ''}"><span class="grow"><b>${esc(label || placeholder)}</b><small>${esc(sub)}</small></span>${place && place.lat ? `<span class="place-ok">${icon('check', 16)}</span>` : ''}${icon('chevron', 16)}</button>`;
+}
 function placeInput(name, placeholder, cfg, value) {
   const pin = cfg.by === 'pincode';
   return `<input class="input input--lg" name="${name}" value="${esc(value || '')}" placeholder="${esc(placeholder)}" aria-label="${esc(placeholder)}" autocomplete="off" ${pin ? 'inputmode="numeric" maxlength="6"' : 'list="areaList"'}>`;
@@ -58,16 +64,15 @@ async function bookForm(body, section, query) {
   const f = mem.form;
   const intl = cfg.by === 'country';
   const business = store.state.accountType === 'business';
-  const mapBtn = (k) => (business ? `<button class="map-btn" type="button" data-map="${k}" title="Pick on map">${duo('pin', 'sm').value}<span>Map</span></button>` : '');
   body.innerHTML = `
     <div class="book">
       <form class="book__form card" id="bf" novalidate>
         <h2 class="h-lg">Delivery details</h2>
         <div class="route">
-          <div class="route__row">${tile('pin', 'plain').value}${intl ? `<input class="input input--lg" name="from" value="${esc(f.from || '')}" placeholder="${esc(cfg.from)}" aria-label="${esc(cfg.from)}" inputmode="numeric" maxlength="6">` : placeInput('from', cfg.from, cfg, f.from)}${mapBtn('from')}</div>
+          <div class="route__row">${tile('pin', 'plain').value}${intl ? `<input class="input input--lg" name="from" value="${esc(f.from || '')}" placeholder="${esc(cfg.from)}" aria-label="${esc(cfg.from)}" inputmode="numeric" maxlength="6">` : placeButton('from', cfg.from, cfg, f.from, f.from_place)}</div>
           <i class="route__dash" aria-hidden="true"></i>
           <div id="stops"></div>
-          <div class="route__row">${tile('flag', 'plain').value}${intl ? `<select class="select input--lg" name="country" aria-label="${esc(cfg.to)}"><option value="">${esc(cfg.to)}</option>${m.countries.map((c) => `<option ${f.country === c ? 'selected' : ''}>${esc(c)}</option>`).join('')}</select>` : placeInput('to', cfg.to, cfg, f.to)}${intl ? '' : mapBtn('to')}</div>
+          <div class="route__row">${tile('flag', 'plain').value}${intl ? `<select class="select input--lg" name="country" aria-label="${esc(cfg.to)}"><option value="">${esc(cfg.to)}</option>${m.countries.map((c) => `<option ${f.country === c ? 'selected' : ''}>${esc(c)}</option>`).join('')}</select>` : placeButton('to', cfg.to, cfg, f.to, f.to_place)}</div>
           ${cfg.by === 'location' ? '<button class="link add-stop" id="addStop" type="button">+ Add a stop</button>' : ''}
         </div>
         ${cfg.by === 'location' ? `<datalist id="areaList">${m.areas.map((a) => `<option value="${esc(a)}">`).join('')}</datalist>` : ''}
@@ -118,7 +123,9 @@ async function bookForm(body, section, query) {
   }
   function paintPlaced() {
     const p = mem.placed;
-    results.innerHTML = `<div class="placed"><span class="placed__ok"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12 5 5 9-10"/></svg></span><b class="placed__t">Order placed</b><small class="mono">${esc(p.id)}</small><p>${esc(p.provider)} · ${esc(p.from)} → ${esc(p.to)}</p><b class="placed__p" translate="no">${esc(money(p.amount))}</b><small class="muted">${p.pay_mode === 'cod' ? 'Pay on delivery' : `Paid by ${PAY_LABEL[p.pay_via] || 'wallet'}`}</small><div id="placedLive" class="placed__live"><div class="skeleton" style="height:80px"></div></div><div class="placed__a"><button class="btn btn-primary" data-live type="button">Live tracking</button><a class="btn btn-outline" href="#/my/orders/${esc(p.id)}">View order</a></div><button class="link" data-another type="button">Book another</button><small class="muted">Simulated order. The journey runs faster than real time.</small></div>`;
+    results.innerHTML = `<div class="placed"><div class="placed__tree" aria-hidden="true"></div><span class="placed__ok"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12 5 5 9-10"/></svg></span><b class="placed__t">Order placed</b><small class="mono">${esc(p.id)}</small><p>${esc(p.provider)} · ${esc(p.from)} → ${esc(p.to)}</p><b class="placed__p" translate="no">${esc(money(p.amount))}</b><small class="muted">${p.pay_mode === 'cod' ? 'Pay on delivery' : `Paid by ${PAY_LABEL[p.pay_via] || 'wallet'}`}</small><div id="placedLive" class="placed__live"><div class="skeleton" style="height:80px"></div></div><div class="placed__a"><button class="btn btn-primary" data-live type="button">Live tracking</button><a class="btn btn-outline" href="#/my/orders/${esc(p.id)}">View order</a></div><button class="link" data-another type="button">Book another</button><small class="muted">Simulated order. The journey runs faster than real time.</small></div>`;
+    // A small tree grows for the new order.
+    if (window.UTTree) window.UTTree.mount(results.querySelector('.placed__tree'), { compact: true, now: true, seed: p.id.length * 31 + p.amount });
     pollPlaced();
   }
   const ready = (d) => (intl ? /^\d{6}$/.test(d.from || '') && d.country : cfg.by === 'pincode' ? /^\d{6}$/.test(d.from || '') && /^\d{6}$/.test(d.to || '') : (d.from || '').trim().length > 2 && (d.to || '').trim().length > 2) && Number(d.weight) > 0;
@@ -145,10 +152,11 @@ async function bookForm(body, section, query) {
       ${q.holiday ? `<p class="note note--warn">${esc(q.holiday.name || 'Holiday')}: ${q.holiday.closed.length ? `${q.holiday.closed.length} partners closed` : 'reduced service'}. <a class="link" href="#/holidays">Calendar</a></p>` : q.insight ? `<p class="note note--${q.insight.tone}">${esc(q.insight.text)}</p>` : ''}
       <div class="res-bar res-bar--tight">${sortChips(mem.sort, SHORT_SORTS)}${filterBtn(countActive(optFields(), mem.f), 'optF')}</div>
       ${list.length ? '' : '<p class="muted center">No services match these filters.</p>'}
-      <ul class="opts">${list.map((o, n) => `<li style="--i:${Math.min(n, 8)}" class="${o.id === mem.selected ? 'open' : ''}"><button type="button" class="opt ${o.id === mem.selected ? 'on' : ''}" data-id="${o.id}" aria-pressed="${o.id === mem.selected}">
-        <img src="${vehicleImg(o.vehicle)}" alt="" width="60" height="40" loading="lazy"><span class="opt__m"><span class="opt__h"><b>${esc(o.provider)}</b>${star(o.rating)}</span><small>${esc(shortEta(o))}</small>${o.tags[0] || o.holiday ? `<span class="opt__tags">${tagBadges(o.tags.slice(0, 1))}${o.holiday ? '<span class="badge badge-amber">Limited</span>' : ''}</span>` : ''}</span>
-        <span class="opt__r"><b translate="no">${esc(money(o.total))}</b>${o.save ? `<small class="pos" translate="no">Save ${esc(money(o.save))}</small>` : ''}</span></button>
+      <ul class="opts" aria-describedby="optNote">${list.map((o, n) => `<li style="--i:${Math.min(n, 8)}" class="${o.id === mem.selected ? 'open' : ''}"><button type="button" class="opt ${o.id === mem.selected ? 'on' : ''}" data-id="${o.id}" aria-pressed="${o.id === mem.selected}">
+        <img src="${vehicleImg(o.vehicle)}" alt="" width="60" height="40" loading="lazy"><span class="opt__m"><span class="opt__h"><b>${esc(o.provider)}</b>${star(o.rating)}${o.kind === 'independent' && o.mode === 'local' ? '<span class="vbadge vbadge--ut" title="UT partner network: drivers verified by UT Log (licence, RC, selfie)">UT partner</span>' : o.verified ? '<span class="vbadge" title="Registered business, checked by UT Log">Verified</span>' : ''}</span><small>${esc(shortEta(o))}</small>${o.tags[0] || o.holiday ? `<span class="opt__tags">${tagBadges(o.tags.slice(0, 1))}${o.holiday ? '<span class="badge badge-amber">Limited</span>' : ''}</span>` : ''}</span>
+        <span class="opt__r"><b translate="no">${esc(money(o.total))}</b>${o.save ? `<small class="pos" translate="no" title="Lower than the average of the ${q.options.length} prices shown for this trip">${esc(money(o.save))} below avg</small>` : ''}</span></button>
         ${o.id === mem.selected ? `<div class="opt__x"><dl><div><dt>Service</dt><dd>${esc(o.title)}</dd></div><div><dt>On time</dt><dd>${o.on_time}%</dd></div>${o.max_kg ? `<div><dt>Load</dt><dd>${load(o)}% of ${o.max_kg >= 1000 ? `${o.max_kg / 1000} t` : `${o.max_kg} kg`}</dd></div>` : ''}<div><dt>Carbon</dt><dd>${o.co2} kg CO₂</dd></div><div><dt>Availability</dt><dd>${esc(o.availability)}</dd></div></dl><label class="opt__cmp"><input type="checkbox" data-cmp="${o.id}" ${mem.compare.includes(o.id) ? 'checked' : ''}> Add to compare</label></div>` : ''}</li>`).join('')}</ul>
+      <p class="opt-note" id="optNote">"Below avg" compares each price with the ${q.options.length} quotes shown for this trip. On-time and claims figures are sample data in this sandbox. <a class="link" href="/pricing/#how" target="_blank" rel="noopener">How pricing works</a></p>
       ${mem.compare.length >= 2 ? `<button class="btn btn-outline btn-block cmp-go" id="cmpGo" type="button">Compare ${mem.compare.length} services</button>` : ''}
       ${sel ? `<div class="sumbar"><div class="sumbar__l"><small>${esc(sel.provider)}${fee ? ' · with pay on delivery fee' : ''}</small><b translate="no">${esc(money(sel.total + fee))}</b></div><button class="btn btn-primary" id="goBook" type="button">Continue</button></div>` : ''}
       ${q.estimated ? '<p class="muted small center notop">Location estimated for this demo.</p>' : ''}`;
@@ -202,15 +210,42 @@ async function bookForm(body, section, query) {
     }
   }
   let timer; let wantScroll = false;
-  body.querySelectorAll('[data-map]').forEach((b) => b.addEventListener('click', async () => {
-    const k = b.dataset.map;
-    const p = await openMapPicker({ title: k === 'from' ? 'Choose pickup on the map' : 'Choose drop on the map', start: mem.form[`${k}_pt`] });
-    if (!p) return;
-    form[k].value = cfg.by === 'location' && p.area ? `${p.area}, ${p.city}` : p.pincode;
+  const setPlace = (k, p) => {
+    const value = cfg.by === 'location' && p.area ? `${p.area}, ${p.city}` : p.pincode;
+    if (!value) { toast('That pin has no pin code we can deliver to. Move it a little.', true); return; }
+    mem.form[`${k}_place`] = p;
     mem.form[`${k}_pt`] = { lat: p.lat, lng: p.lng };
     mem.form[`${k}_addr`] = p.address;
+    mem.form[k] = value;
+    const btn = body.querySelector(`[data-place="${k}"]`);
+    btn.outerHTML = placeButton(k, k === 'from' ? cfg.from : cfg.to, cfg, value, p).replace(/^<input[^>]*>/, '');
+    form[k].value = value;
     form[k].dispatchEvent(new Event('input', { bubbles: true }));
-  }));
+  };
+  body.addEventListener('click', async (e) => {
+    const b = e.target.closest('[data-place]'); if (!b) return;
+    const k = b.dataset.place; const other = mem.form[k === 'from' ? 'to_place' : 'from_place'];
+    const cur = mem.form[`${k}_place`];
+    const p = await openPlacePicker({ kind: k === 'from' ? 'pickup' : 'drop', start: null, other });
+    if (p) setPlace(k, p); else if (cur) b.focus();
+  });
+  // Business accounts: the business address is the starting pickup.
+  const ba = business && (store.state.profile || {}).business_address;
+  if (ba && ba.line && !intl && !mem.form.from && /^\d{6}$/.test(ba.pincode || '')) {
+    (async () => {
+      try {
+        const mm = await api('/public/booking/meta');
+        // Prefer the locality named in the address ("Koramangala"), then the pin code area.
+        const named = mm.areas.find((x) => ba.line.toLowerCase().includes(x.split(', ')[0].toLowerCase()));
+        const pt = (named && mm.area_points[named]) || mm.pin_points[ba.pincode.slice(0, 3)] || mm.pin_points[ba.pincode.slice(0, 2)];
+        if (!pt || mem.form.from) return;
+        const near = await api('/hub/geo/reverse', { method: 'POST', body: { lat: pt[0], lng: pt[1] } });
+        const place = { label: 'Business address', area: near.area || '', city: ba.city || near.city || '', pincode: ba.pincode, lat: pt[0], lng: pt[1], house: ba.line, street: '', floor: '', lift: null, landmark: '', contact: null };
+        place.address = `${ba.line}, ${ba.city} ${ba.pincode}`.replace(/\s+/g, ' ').trim();
+        if (body.isConnected && !mem.form.from) setPlace('from', place);
+      } catch (x) { /* the user can still pick */ }
+    })();
+  }
   form.addEventListener('input', (e) => { if (e.isTrusted && (e.target.name === 'from' || e.target.name === 'to')) { delete mem.form[`${e.target.name}_pt`]; delete mem.form[`${e.target.name}_addr`]; } valFx(); if (e.target.name === 'reference') { mem.form.reference = e.target.value; return; } if (e.target.name === 'pay_mode') return; clearTimeout(timer); timer = setTimeout(search, 650); });
   form.addEventListener('change', (e) => { if (e.target.name === 'pay_mode') { mem.form.pay_mode = e.target.value; paint(); } });
   form.addEventListener('submit', (e) => {
@@ -256,19 +291,24 @@ function confirmBooking(section, mem, form) {
   const business = store.state.accountType === 'business';
   const pay = form.pay_mode.value;
   const fee = pay === 'cod' ? Math.max(25, Math.round(o.total * 0.015)) : 0;
-  const saved = (p.addresses || []);
-  const addr = (name, label, prefill = '') => `<label class="field full">${label}${saved.length ? `<select class="select" data-fill="${name}"><option value="">Choose a saved address</option>${saved.map((a) => `<option value="${esc(`${a.line}, ${a.city} ${a.pincode}`)}">${esc(a.label)} · ${esc(a.line)}</option>`).join('')}</select>` : ''}<textarea class="input" name="${name}" rows="2" placeholder="House or building, street, landmark">${esc(prefill)}</textarea></label>`;
+  const ba = business && p.business_address && p.business_address.line ? p.business_address : null;
+  const bizAddr = ba ? `${ba.line}, ${ba.city} ${ba.pincode}`.replace(/\s+/g, ' ').trim() : '';
+  const saved = [...(ba ? [{ label: 'Business address', line: ba.line, city: ba.city, pincode: ba.pincode }] : []), ...(p.addresses || [])];
+  const addrOpt = (a, cur) => { const v = `${a.line}, ${a.city} ${a.pincode}`.replace(/\s+/g, ' ').trim(); return `<option value="${esc(v)}" ${v === cur ? 'selected' : ''}>${esc(a.label)} · ${esc(a.line)}</option>`; };
+  // A pinned place shows as a card (address, floor, lift, contact); otherwise the old typed field.
+  const pinned = (name, label, pl) => `<div class="field full"><span>${label}</span><div class="addr-card"><span class="addr-card__ico">${icon('pin', 18)}</span><div class="grow"><b>${esc(pl.address)}</b>${placeChips(pl).length ? `<span class="addr-chips">${placeChips(pl).map((c) => `<em>${esc(c)}</em>`).join('')}</span>` : ''}</div><span class="place-ok" title="Pinned on the map">${icon('check', 16)}</span></div><textarea name="${name}" hidden>${esc(pl.address)}</textarea></div>`;
+  const addr = (name, label, prefill = '') => (name === 'pickup_address' && mem.form.from_place && mem.form.from_place.house ? pinned(name, label, mem.form.from_place) : name === 'drop_address' && mem.form.to_place && mem.form.to_place.house ? pinned(name, label, mem.form.to_place) : `<label class="field full">${label}${saved.length ? `<select class="select" data-fill="${name}"><option value="">Choose a saved address</option>${saved.map((a) => addrOpt(a, prefill)).join('')}</select>` : ''}<textarea class="input" name="${name}" rows="2" placeholder="House or building, street, landmark">${esc(prefill)}</textarea></label>`);
   modal({
     title: 'Confirm your booking', wide: true,
     body: `<div class="confirm"><img src="${vehicleImg(o.vehicle)}" alt="" width="84" height="56"><div><b>${esc(o.provider)}</b><small>${esc(o.title)} · ${esc(q.route.from)} → ${esc(q.route.to)}</small></div><b class="confirm__p" translate="no">${esc(money(o.total + fee))}</b></div>
       <form class="form-grid" id="cf" novalidate>
-        <label class="field">Contact name<input class="input" name="name" value="${esc(p.name || (mem.sample ? 'Asha Rao' : ''))}"></label>
-        <label class="field">Mobile number<input class="input" name="phone" inputmode="numeric" maxlength="10" value="${esc((/^[6-9]\d{9}$/.test(p.mobile || '') && p.mobile) || (mem.sample ? '9876500001' : ''))}"></label>
-        ${addr('pickup_address', 'Pickup address', mem.form.from_addr || (mem.sample ? '12, 5th Main, Sector 3' : ''))}${addr('drop_address', 'Drop address', mem.form.to_addr || (mem.sample ? '44, Lake View Road, Block B' : ''))}
+        <label class="field">Your name <span class="req" aria-hidden="true"></span><input class="input" name="name" required aria-required="true" autocomplete="name" value="${esc(p.name || (mem.sample ? 'Asha Rao' : ''))}"></label>
+        <label class="field">Your mobile number <span class="req" aria-hidden="true"></span><input class="input" name="phone" required aria-required="true" autocomplete="tel-national" inputmode="numeric" maxlength="10" value="${esc((/^[6-9]\d{9}$/.test(p.mobile || '') && p.mobile) || (mem.sample ? '9876500001' : ''))}"></label>
+        ${addr('pickup_address', 'Pickup address', mem.form.from_addr || bizAddr || (mem.sample ? '12, 5th Main, Sector 3' : ''))}${addr('drop_address', 'Drop address', mem.form.to_addr || (mem.sample ? '44, Lake View Road, Block B' : ''))}
         <div class="field full"><span>Add-ons</span><div class="extras">${EXTRAS.map(([k, l, c]) => `<label class="extra"><input type="checkbox" data-extra="${k}" data-cost="${c}"><span><b>${l}</b><small translate="no">+${esc(money(c))}</small></span></label>`).join('')}</div></div>
-        ${business ? `<label class="field">Receiver name<input class="input" name="r_name"></label><label class="field">Receiver mobile<input class="input" name="r_phone" inputmode="numeric" maxlength="10"></label><label class="row full"><input type="checkbox" class="check" name="r_consent"> The receiver agreed to get delivery updates on WhatsApp</label>` : ''}
+        ${business ? `<label class="field">Receiver name<input class="input" name="r_name" value="${esc((mem.form.to_place && mem.form.to_place.contact && mem.form.to_place.contact.name) || '')}"></label><label class="field">Receiver mobile<input class="input" name="r_phone" inputmode="numeric" maxlength="10" value="${esc((mem.form.to_place && mem.form.to_place.contact && mem.form.to_place.contact.phone) || '')}"></label><label class="row full"><input type="checkbox" class="check" name="r_consent"> The receiver agreed to get delivery updates on WhatsApp</label>` : ''}
         ${business ? `<label class="field">Company<input class="input" name="company" value="${esc(p.company || '')}"></label><label class="field">GSTIN (optional)<input class="input" name="gstin" maxlength="15" value="${esc(p.gstin || '')}"></label>` : ''}
-      ${pay === 'cod' ? '' : payMethods()}</form>
+      ${pay === 'cod' ? '' : `${payMethods({ only: BOOKING_PAY })}<p class="pay-hint full">Have a gift card? <button class="link" type="button" data-gc>Add it to your wallet</button> and pay with Wallet.</p>`}</form>
       <div id="deals"></div><dl class="break" id="brk"></dl>
       <p class="muted small notop">${esc(o.provider)} carries out this job. UT Log connects you and keeps the record. Demo booking: no real pickup is arranged.</p>
       <p class="form-error" id="cfErr"></p>`,
@@ -286,8 +326,13 @@ function confirmBooking(section, mem, form) {
       const go = el.querySelector('#cfGo');
       go.addEventListener('click', () => withBusy(go, async () => {
         const d = formData(f);
+        // Name and mobile are required before anything is charged.
+        const cfErr = el.querySelector('#cfErr');
+        if (String(d.name || '').trim().length < 2) { cfErr.textContent = 'Enter your name.'; f.querySelector('[name=name]').focus(); return; }
+        if (!/^[6-9]\d{9}$/.test(String(d.phone || '').trim())) { cfErr.textContent = 'Enter your 10-digit mobile number.'; f.querySelector('[name=phone]').focus(); return; }
+        cfErr.textContent = '';
         try {
-          const book = (x) => api('/hub/transport/book', { method: 'POST', body: { ...x, quote_id: q.quote_id, option_id: o.id, pay_mode: pay, contact: { name: d.name, phone: d.phone }, pickup_address: d.pickup_address, drop_address: d.drop_address, company: d.company, gstin: d.gstin, reference: form.reference.value, coupon: deals.coupon, use_points: deals.use_points, extras: [...el.querySelectorAll('[data-extra]:checked')].map((c) => c.dataset.extra), receiver: d.r_phone ? { name: d.r_name, phone: d.r_phone, consent: !!d.r_consent } : undefined } });
+          const book = (x) => api('/hub/transport/book', { method: 'POST', body: { ...x, quote_id: q.quote_id, option_id: o.id, pay_mode: pay, contact: { name: d.name, phone: d.phone }, pickup_address: d.pickup_address, drop_address: d.drop_address, pickup_place: mem.form.from_place || null, drop_place: mem.form.to_place || null, company: d.company, gstin: d.gstin, reference: form.reference.value, coupon: deals.coupon, use_points: deals.use_points, extras: [...el.querySelectorAll('[data-extra]:checked')].map((c) => c.dataset.extra), receiver: d.r_phone ? { name: d.r_name, phone: d.r_phone, consent: !!d.r_consent } : undefined } });
           let extra = {};
           if (pay !== 'cod') { const check = await book({ dry_run: true }); extra = await checkout(el, check.amount); if (!extra) return; }
           const r = await withFunds(() => book(extra));

@@ -3,6 +3,7 @@
 import { api, esc, money, store, toast, modal, refreshCounts, inrHint, date } from '../core.js';
 import { duo, scene } from './art.js';
 import { popover } from './prefs.js';
+import { isPhone, intentPanel } from './upi.js';
 
 export const refresh = () => { refreshCounts().catch(() => {}); window.dispatchEvent(new CustomEvent('ut:refresh')); };
 
@@ -10,7 +11,7 @@ export const refresh = () => { refreshCounts().catch(() => {}); window.dispatchE
 const fakeQr = (seed) => { let h = 0; for (const c of seed) h = (h * 31 + c.charCodeAt(0)) >>> 0; let out = ''; for (let y = 0; y < 21; y++) for (let x = 0; x < 21; x++) { const corner = (x < 7 && y < 7) || (x > 13 && y < 7) || (x < 7 && y > 13); h = (h * 1664525 + 1013904223) >>> 0; const on = corner ? (x % 6 === 0 || y % 6 === 0 || ((x % 14) > 1 && (x % 14) < 5 && (y % 14) > 1 && (y % 14) < 5)) : (h >> 16) & 1; if (on) out += `<rect x="${x}" y="${y}" width="1" height="1"/>`; } return `<svg class="qr" viewBox="0 0 21 21" aria-label="Sandbox payment code">${out}</svg>`; };
 
 // Add money through the sandbox gateway. No card details are ever asked for.
-export function addMoney(prefill = 1000, why) {
+export function addMoney(prefill = 1000, why, start = 'upi') {
   const presets = [500, 1000, 2000, 5000, 10000];
   return modal({
     title: 'Add money to wallet',
@@ -18,20 +19,30 @@ export function addMoney(prefill = 1000, why) {
       <div class="row">${presets.map((a) => `<button class="btn btn-outline btn-sm" type="button" data-amt="${a}">₹${a.toLocaleString('en-IN')}</button>`).join('')}</div>
       <label class="field">Amount (₹)<input class="input" id="amt" inputmode="numeric" value="${Math.max(100, Math.ceil(prefill))}"></label>
       <p class="muted small notop" id="amtFx"></p>
-      <div class="pay2 pay4" role="radiogroup" aria-label="Payment method">${[['upi', 'UPI'], ['qr', 'Scan QR'], ['card', 'Card'], ['netbanking', 'Netbanking']].map(([v, l], n) => `<label class="pay"><input type="radio" name="m" value="${v}" ${n ? '' : 'checked'}><span><b>${l}</b></span></label>`).join('')}</div>
+      <div class="pay2 pay4" role="radiogroup" aria-label="Payment method">${[['upi', 'UPI'], ['qr', 'Scan QR'], ['card', 'Card'], ['netbanking', 'Netbanking'], ['giftcard', 'Gift card']].map(([v, l]) => `<label class="pay"><input type="radio" name="m" value="${v}" ${v === start ? 'checked' : ''}><span><b>${l}</b></span></label>`).join('')}</div>
+      <div id="gcBox" hidden><label class="field">Gift card code<input class="input mono" id="gcCode" placeholder="e.g. UTGC-2026-DEMO-0500" autocomplete="off" style="text-transform:uppercase"></label><p class="muted small notop">The card's full value goes into your wallet. Use it for any booking, recharge or bill.</p></div>
       <p class="muted small notop">Sandbox payment: no real money is taken.</p><p class="form-error" id="amtErr"></p>`,
     footer: '<button class="btn btn-outline" data-close>Cancel</button><button class="btn btn-primary" id="amtGo">Continue</button>',
     onMount(el, close) {
       const input = el.querySelector('#amt');
       const fx = () => { el.querySelector('#amtFx').textContent = inrHint(input.value.replace(/\D/g, '')); };
       input.addEventListener('input', fx); fx();
+      // Gift card: no amount to pick, the code decides it.
+      const amtBits = [el.querySelector('.row'), input.closest('.field'), el.querySelector('#amtFx')];
+      const mode = () => { const gc = el.querySelector('[name=m]:checked').value === 'giftcard'; el.querySelector('#gcBox').hidden = !gc; amtBits.forEach((x) => { if (x) x.hidden = gc; }); el.querySelector('#amtGo').textContent = gc ? 'Redeem' : 'Continue'; if (gc) el.querySelector('#gcCode').focus(); };
+      el.addEventListener('change', (e) => { if (e.target.name === 'm') mode(); }); mode();
       el.addEventListener('click', (e) => { const b = e.target.closest('[data-amt]'); if (b) { input.value = b.dataset.amt; fx(); } });
       el.querySelector('#amtGo').addEventListener('click', async () => {
         try {
           const method = el.querySelector('[name=m]:checked').value;
+          if (method === 'giftcard') {
+            const r = await api('/hub/wallet/redeem', { method: 'POST', body: { code: el.querySelector('#gcCode').value } });
+            toast(`${money(r.amount)} added from your gift card`); refresh(); close(true); return;
+          }
           const p = await api('/hub/payments/intent', { method: 'POST', body: { amount: Number(input.value.replace(/\D/g, '')), method } });
           const label = { upi: 'Approve the request in your UPI app', qr: 'Scan this code with any UPI app', card: 'Confirm on your sandbox card', netbanking: 'Complete the payment on your bank page' }[method];
-          el.querySelector('.modal__body').innerHTML = `<div class="gateway">${method === 'qr' ? fakeQr(p.id) : '<span class="spinner"></span>'}<b translate="no">${esc(money(p.amount))}</b><p>${esc(label)}</p><small class="muted mono">${esc(p.id)}</small></div><p class="callout">Sandbox: choose how this test payment ends.</p><p class="form-error" id="gErr"></p>`;
+          if (method === 'upi' && isPhone()) el.querySelector('.modal__body').innerHTML = `${intentPanel({ amount: p.amount, ref: p.id })}<p class="callout">Sandbox: nothing is charged. Choose how this test payment ends.</p><p class="form-error" id="gErr"></p>`;
+          else el.querySelector('.modal__body').innerHTML = `<div class="gateway">${method === 'qr' ? fakeQr(p.id) : '<span class="spinner"></span>'}<b translate="no">${esc(money(p.amount))}</b><p>${esc(label)}</p><small class="muted mono">${esc(p.id)}</small></div><p class="callout">Sandbox: choose how this test payment ends.</p><p class="form-error" id="gErr"></p>`;
           el.querySelector('.modal__foot').innerHTML = '<button class="btn btn-outline" id="gFail">Simulate failure</button><button class="btn btn-primary" id="gOk">Simulate success</button>';
           const finish = async (result) => {
             try { await api('/hub/payments/confirm', { method: 'POST', body: { id: p.id, result } }); if (result === 'success') { toast('Money added to your wallet'); refresh(); close(true); } else { toast('Payment failed. Nothing was charged.', true); close(false); } }

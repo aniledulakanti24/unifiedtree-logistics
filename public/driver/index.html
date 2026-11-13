@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>UT Partner</title>
+  <meta name="description" content="UT Partner: take delivery trips, track earnings and get paid to UPI.">
+  <meta name="theme-color" content="#0F2925">
+  <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="apple-touch-icon" href="/app/icon-192.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400..800&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+  <link rel="stylesheet" href="driver.css?v=3">
+</head>
+<body>
+  <header class="dtop">
+    <a class="dtop__brand" href="/driver/"><img src="/assets/favicon.svg" alt="" width="28" height="28"><span>UT Partner</span></a>
+    <span class="dtop__state" id="topState" hidden></span>
+  </header>
+  <main id="screen" class="dmain" tabindex="-1" aria-live="polite"></main>
+  <nav class="dtabs" id="tabs" hidden aria-label="Partner app">
+    <a href="#home" data-tab="home"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 11l9-7 9 7v9a1 1 0 0 1-1 1h-5v-6h-6v6H4a1 1 0 0 1-1-1z"/></svg><span>Trips</span></a>
+    <a href="#earnings" data-tab="earnings"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 4h12M6 9h12M14 20 7 13h2.5a4.5 4.5 0 0 0 0-9"/></svg><span>Earnings</span></a>
+    <a href="#account" data-tab="account"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg><span>Account</span></a>
+  </nav>
+  <div id="sheet"></div>
+  <div id="toast" class="dtoast" role="status" hidden></div>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js" defer></script>
+  <script type="module" src="driver.js?v=5"></script>
+</body>
+</html>

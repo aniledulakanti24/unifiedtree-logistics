@@ -323,7 +323,14 @@ module.exports = function register(routes, { send }, ctx, engine) {
     return true;
   }
 
-  const insightFor = (input, section) => { const n = hash(`${section}|${input.from}|${input.to}|${localDay(Date.now())}`); return n % 2 ? { tone: 'good', text: `Prices on this route are ${6 + (n % 12)}% below usual today.` } : { tone: 'warn', text: 'Demand is high on this route. Prices may rise soon.' }; };
+  // A fact from the quotes in hand, never an invented trend or urgency.
+  const insightFor = (list) => {
+    if (list.length < 2) return null;
+    const totals = list.map((o) => o.total); const lo = Math.min(...totals); const hi = Math.max(...totals);
+    const avg = totals.reduce((a, b) => a + b, 0) / totals.length;
+    const pct = Math.round(((avg - lo) / avg) * 100);
+    return { tone: 'info', text: `${list.length} prices for this trip, from ₹${lo.toLocaleString('en-IN')} to ₹${hi.toLocaleString('en-IN')}. The lowest is ${pct}% below their average.` };
+  };
 
   routes['POST /v1/hub/transport/quote'] = hub(({ res, body, owner, h }) => {
     const section = ['vehicle', 'courier', 'logistics', 'international'].includes(body.section) ? body.section : null;
@@ -403,7 +410,7 @@ module.exports = function register(routes, { send }, ctx, engine) {
     const form = { from: text(body.from_place, 80), to: text(body.to_place, 80), country: body.country, weight: body.weight, pieces: body.pieces, length: body.length, breadth: body.breadth, height: body.height, category: body.category, value: body.value, stops: stopNames, helpers: body.helpers };
     quotes.set(id, { owner, section, input, options: list, form, expires: Date.now() + 20 * 60000 });
     for (const [k, q] of quotes) if (q.expires < Date.now()) quotes.delete(k);
-    send(res, 200, { quote_id: id, valid_minutes: 20, section, route: { service: input.service, from: input.from, to: input.to, city: input.city || null, distance_km: input.distanceKm || null }, load: { weight: input.weight, pieces: input.pieces }, options: list, holiday, estimated: !!(places.labels.from || places.labels.to), insight: insightFor(input, section),
+    send(res, 200, { quote_id: id, valid_minutes: 20, section, route: { service: input.service, from: input.from, to: input.to, city: input.city || null, distance_km: input.distanceKm || null }, load: { weight: input.weight, pieces: input.pieces }, options: list, holiday, estimated: !!(places.labels.from || places.labels.to), insight: insightFor(list),
       message: list.length ? null : holiday && holiday.closed.length ? `Partners for this service are closed for ${holiday.name}. Try another pickup date.` : missed ? `No service can meet your deadline. ${missed} option${missed > 1 ? 's are' : ' is'} available with a later delivery.` : section === 'courier' ? 'No courier fits this load. Try Logistics for full-truck services.' : 'No service fits this load right now. Try another weight or try again in a few minutes.' });
   });
 
@@ -418,6 +425,18 @@ module.exports = function register(routes, { send }, ctx, engine) {
     if (body.gstin && !/^\d{2}[A-Z]{5}\d{4}[A-Z][1-9A-Z]Z[0-9A-Z]$/.test(String(body.gstin).toUpperCase())) throw oops(400, 'Enter a valid GSTIN or leave it blank.');
     const rc = body.receiver || {};
     if (rc.phone && !/^[6-9]\d{9}$/.test(rc.phone)) throw oops(400, 'Enter a 10-digit mobile number for the receiver, or leave it blank.');
+    const placeOf = (x) => {
+      if (!x || typeof x !== 'object') return null;
+      const lat = Number(x.lat); const lng = Number(x.lng);
+      const ph = text(x.contact && x.contact.phone, 10);
+      if (ph && !/^[6-9]\d{9}$/.test(ph)) throw oops(400, 'Enter a 10-digit mobile number for the place contact, or leave it blank.');
+      return { lat: Number.isFinite(lat) ? lat : null, lng: Number.isFinite(lng) ? lng : null, house: text(x.house, 80), floor: text(x.floor, 10), lift: x.lift === true ? true : x.lift === false ? false : null, landmark: text(x.landmark, 80), contact: ph || text(x.contact && x.contact.name, 60) ? { name: text(x.contact && x.contact.name, 60), phone: ph } : null };
+    };
+    const places = { pickup: placeOf(body.pickup_place), drop: placeOf(body.drop_place) };
+    // Someone to call at each end: the booker stands in at pickup; the drop needs its receiver.
+    if (places.pickup && !(places.pickup.contact && places.pickup.contact.phone)) places.pickup.contact = { name: text(c.name, 60), phone: c.phone };
+    if (places.drop && !(places.drop.contact && places.drop.contact.phone && places.drop.contact.name)) throw oops(400, 'Add the name and mobile number of the person who receives it.');
+    if (places.pickup && places.drop && places.pickup.lat != null && places.drop.lat != null && Math.abs(places.pickup.lat - places.drop.lat) < 0.0003 && Math.abs(places.pickup.lng - places.drop.lng) < 0.0003) throw oops(400, 'Pickup and drop are the same spot. Move one of the pins.');
     const pay = body.pay_mode === 'cod' ? 'cod' : 'prepaid';
     const fee = pay === 'cod' ? Math.max(25, Math.round(option.total * 0.015)) : 0;
     const extras = (Array.isArray(body.extras) ? body.extras : []).filter((x) => EXTRAS[x]);
@@ -433,7 +452,7 @@ module.exports = function register(routes, { send }, ctx, engine) {
     else if (pay === 'prepaid') { debit(db, amount, `${option.title} · ${option.provider} · ${id}`); via = { pay_via: 'wallet' }; }
     settleDeal(h, deal, option.title);
     const i = q.input;
-    const rec = addRecord(h, { id, booking_id: id, section: q.section, title: option.title, provider: option.provider, provider_type: option.provider_type, sub: `${i.from} → ${i.to}`, amount, gross: option.total + fee + extraFee, fee, extras, discount: deal.discount, coupon: deal.coupon, points_used: deal.points, insurance: option.insurance || 0, declared: option.insurance ? i.declared : 0, pay_mode: pay, ...via, status: 'BOOKED', label: 'Booking confirmed', weight: i.weight, reference: text(body.reference, 40), segment: i.segment, form: q.form, pickup_address: text(body.pickup_address, 200), drop_address: text(body.drop_address, 200), contact_name: text(c.name, 60), contact_phone: c.phone, receiver: rc.phone ? { name: text(rc.name, 60) || 'there', phone: rc.phone, consent: !!rc.consent } : null, scheduled_for: i.pickupAt > Date.now() + 3600000 ? iso(i.pickupAt) : null });
+    const rec = addRecord(h, { id, booking_id: id, places, section: q.section, title: option.title, provider: option.provider, provider_type: option.provider_type, sub: `${i.from} → ${i.to}`, amount, gross: option.total + fee + extraFee, fee, extras, discount: deal.discount, coupon: deal.coupon, points_used: deal.points, insurance: option.insurance || 0, declared: option.insurance ? i.declared : 0, pay_mode: pay, ...via, status: 'BOOKED', label: 'Booking confirmed', weight: i.weight, reference: text(body.reference, 40), segment: i.segment, form: q.form, pickup_address: text(body.pickup_address, 200), drop_address: text(body.drop_address, 200), contact_name: text(c.name, 60), contact_phone: c.phone, receiver: rc.phone ? { name: text(rc.name, 60) || 'there', phone: rc.phone, consent: !!rc.consent } : null, scheduled_for: i.pickupAt > Date.now() + 3600000 ? iso(i.pickupAt) : null });
     q.options = q.options.filter((o) => o.id !== option.id);
     send(res, 200, { id: rec.id, amount, pay_mode: pay, pay_via: via.pay_via, wallet_balance: db.balance, tracking_url: `/track/?id=${id}` });
   });
@@ -456,13 +475,19 @@ module.exports = function register(routes, { send }, ctx, engine) {
     send(res, 200, { id: r.id, wallet_balance: db.balance, refund: r.pay_mode === 'prepaid' ? refund : 0 });
   });
 
+  function periodOf(url) {
+    const p = (v, end) => { const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(v || ''); return m ? new Date(+m[1], +m[2] - 1, +m[3] + (end ? 1 : 0)).getTime() : NaN; };
+    const a = p(url.searchParams.get('from')); const b = p(url.searchParams.get('to'), true);
+    if (a < b) return { since: a, until: b, days: Math.round((b - a) / day) };
+    const days = Number(url.searchParams.get('days')) || 0;
+    return { since: days ? Date.now() - days * day : 0, until: Infinity, days };
+  }
   routes['GET /v1/hub/orders'] = hub(({ res, url, h }) => {
     const section = url.searchParams.get('section');
     const group = url.searchParams.get('group');
-    const days = Number(url.searchParams.get('days')) || 0;
+    const { since, until } = periodOf(url);
     const search = (url.searchParams.get('search') || '').trim().toLowerCase();
     const scope = url.searchParams.get('scope');
-    const since = days ? Date.now() - days * day : 0;
     let list = h.records.map(live);
     if (section) list = list.filter((r) => r.section === section);
     if (url.searchParams.get('desk')) list = desks.pick(list, url.searchParams.get('desk'), url.searchParams.get('sub'));
@@ -471,7 +496,7 @@ module.exports = function register(routes, { send }, ctx, engine) {
     if (scope === 'intl') list = list.filter((r) => r.section === 'international');
     const payF = url.searchParams.get('pay');
     if (payF) list = list.filter((r) => r.pay_mode === payF);
-    if (since) list = list.filter((r) => Date.parse(r.at) >= since);
+    if (since || until < Infinity) list = list.filter((r) => { const t = Date.parse(r.at); return t >= since && t < until; });
     if (search) list = list.filter((r) => `${r.id} ${r.title} ${r.provider} ${r.sub}`.toLowerCase().includes(search));
     const counts = { all: list.length, new: 0, assigned: 0, transit: 0, delivered: 0, cancelled: 0 };
     list.forEach((r) => { counts[r.group] = (counts[r.group] || 0) + 1; });
@@ -503,7 +528,7 @@ module.exports = function register(routes, { send }, ctx, engine) {
   function series(list, days) {
     return Array.from({ length: days }, (_, n) => { const from = startOfDay(days - 1 - n); return { day: iso(from).slice(0, 10), amount: list.filter((r) => { const t = Date.parse(r.at); return r.status !== 'CANCELLED' && t >= from && t < from + day; }).reduce((s, r) => s + r.amount, 0) }; });
   }
-  const profileScore = (p, db) => [p.account_type, p.name, p.email, p.mobile, p.addresses.length, p.upi || p.bank.account, p.account_type === 'business' ? p.gstin : p.dob].filter(Boolean).length;
+  const profileScore = (p, db) => [p.account_type, p.name, p.email, p.mobile, p.addresses.length || p.business_address, p.upi || p.bank.account, p.account_type === 'business' ? p.gstin : p.dob].filter(Boolean).length;
 
   function upcomingOf(h) {
     return h.accounts.filter((a) => a.next_due && a.type !== 'fastag').map((a) => ({ id: a.id, type: a.type, provider: a.provider, label: a.label, amount: a.amount, auto: a.auto, due: a.next_due, days: Math.max(0, Math.round((Date.parse(a.next_due) - today0()) / day)) })).sort((a, b) => a.days - b.days);
@@ -527,11 +552,10 @@ module.exports = function register(routes, { send }, ctx, engine) {
   const deskKey = (url) => { const k = url.searchParams.get('desk'); if (!desks.DESKS[k]) throw oops(400, 'Choose a service.'); return k; };
   routes['GET /v1/hub/desk/analytics'] = hub(({ res, url, h }) => {
     const key = deskKey(url);
-    const days = Number(url.searchParams.get('days')) || 0;
+    const { since, until, days } = periodOf(url);
     const payF = url.searchParams.get('pay');
     const everything = desks.pick(h.records.map(live), key, url.searchParams.get('sub')).filter((r) => !payF || r.pay_mode === payF);
-    const since = days ? Date.now() - days * day : 0;
-    const list = everything.filter((r) => Date.parse(r.at) >= since);
+    const list = everything.filter((r) => { const t = Date.parse(r.at); return t >= since && t < until; });
     const paid = list.filter((r) => r.status !== 'CANCELLED');
     const spend = paid.reduce((t, r) => t + r.amount, 0);
     const done = list.filter((r) => r.group === 'delivered').length;
@@ -585,8 +609,11 @@ module.exports = function register(routes, { send }, ctx, engine) {
   // ---- overview: the dashboard, compared with the period before -------------------------
   const SECTION_NAME = { vehicle: 'Vehicle', courier: 'Courier', logistics: 'Logistics', international: 'International', travel: 'Travel & stay', rides: 'Local rides', recharge: 'Recharge', bills: 'Bills', business: 'Business payments' };
   routes['GET /v1/hub/overview'] = hub(({ res, url, db, h, perms }) => {
-    const days = [7, 30, 90].includes(Number(url.searchParams.get('days'))) ? Number(url.searchParams.get('days')) : 30;
-    const now = Date.now(); const span = days * day;
+    const per = periodOf(url);
+    const custom = per.until < Infinity;
+    const days = custom ? per.days : [1, 7, 30, 90, 365].includes(per.days) ? per.days : 30;
+    const now = custom ? per.until : Date.now(); const span = custom ? per.until - per.since : days * day;
+    const qs = custom ? `from=${url.searchParams.get('from')}&to=${url.searchParams.get('to')}` : 'days=' + days;
     const all = h.records.map(live);
     const inRange = (from, to) => all.filter((r) => { const t = Date.parse(r.at); return t >= from && t < to; });
     const cur = inRange(now - span, now + 1); const prev = inRange(now - 2 * span, now - span);
@@ -600,18 +627,18 @@ module.exports = function register(routes, { send }, ctx, engine) {
     const pct = (a, b) => (b ? Math.round(((a - b) / b) * 100) : null);
     // Trend line: one point per day (per week for 90 days).
     // Trend line: a few even buckets, so sparse days do not turn into spikes.
-    const n = days === 7 ? 7 : days === 30 ? 10 : 13; const width = span / n;
+    const n = days <= 1 ? 6 : days <= 7 ? days : days <= 31 ? 10 : days <= 120 ? 13 : 12; const width = span / n;
     const spark = (f) => Array.from({ length: n }, (_, i) => { const from = now - span + i * width; return f(inRange(from, from + width)); });
     const active = all.filter((r) => ['new', 'assigned', 'transit'].includes(r.group));
     const kpis = [
       { key: 'spend', label: 'Spend', icon: 'rupee', fmt: 'money', value: sum(paid(cur)), delta: pct(sum(paid(cur)), sum(paid(prev))), tone: 'neutral', note: `${paid(cur).length} paid orders`, href: '#/insights', spark: spark((l) => sum(paid(l))) },
-      { key: 'orders', label: 'Bookings', icon: 'box', fmt: 'num', value: cur.length, delta: pct(cur.length, prev.length), tone: 'up', note: `${prev.length} in the period before`, href: '#/my/orders?scope=all&days=' + days, spark: spark((l) => l.length) },
-      { key: 'done', label: 'Completion rate', icon: 'check', fmt: 'pct', bar: rate(cur), barTone: 'good', value: rate(cur), delta: rate(cur) != null && rate(prev) != null ? rate(cur) - rate(prev) : null, unit: 'pts', tone: 'up', note: `${closed(cur).length} closed orders`, href: '#/my/orders?scope=all&group=delivered&days=' + days },
+      { key: 'orders', label: 'Bookings', icon: 'box', fmt: 'num', value: cur.length, delta: pct(cur.length, prev.length), tone: 'up', note: `${prev.length} in the period before`, href: '#/my/orders?scope=all&' + qs, spark: spark((l) => l.length) },
+      { key: 'done', label: 'Completion rate', icon: 'check', fmt: 'pct', bar: rate(cur), barTone: 'good', value: rate(cur), delta: rate(cur) != null && rate(prev) != null ? rate(cur) - rate(prev) : null, unit: 'pts', tone: 'up', note: `${closed(cur).length} closed orders`, href: '#/my/orders?scope=all&group=delivered&' + qs },
       { key: 'avg', label: 'Average order', icon: 'trend', fmt: 'money', value: avg(cur), delta: pct(avg(cur), avg(prev)), tone: 'neutral', note: 'Paid orders only', href: '#/insights', spark: spark(avg) },
       { key: 'active', label: 'Active now', icon: 'truck', fmt: 'num', value: active.length, note: 'Booked or on the way', href: '#/my/orders?scope=all&days=' },
       { key: 'wallet', label: 'Wallet balance', icon: 'wallet', fmt: 'money', value: perms.wallet === 'none' ? null : db.balance, note: db.balance < 1000 ? 'Running low' : 'Ready for prepaid bookings', href: '#/wallet' },
       { key: 'saved', label: 'Saved', icon: 'tag', fmt: 'money', value: saved(cur), delta: pct(saved(cur), saved(prev)), tone: 'up', note: 'Coupons and reward points', href: '#/rewards', spark: spark(saved) },
-      { key: 'cancel', label: 'Cancellations', icon: 'x', fmt: 'num', bar: cur.length ? Math.round(((cur.length - paid(cur).length) / cur.length) * 100) : null, barTone: 'bad', value: cur.length - paid(cur).length, delta: pct(cur.length - paid(cur).length, prev.length - paid(prev).length), tone: 'down', note: cur.length ? `${Math.round(((cur.length - paid(cur).length) / cur.length) * 100)}% of bookings` : 'No bookings yet', href: '#/my/orders?scope=all&group=cancelled&days=' + days },
+      { key: 'cancel', label: 'Cancellations', icon: 'x', fmt: 'num', bar: cur.length ? Math.round(((cur.length - paid(cur).length) / cur.length) * 100) : null, barTone: 'bad', value: cur.length - paid(cur).length, delta: pct(cur.length - paid(cur).length, prev.length - paid(prev).length), tone: 'down', note: cur.length ? `${Math.round(((cur.length - paid(cur).length) / cur.length) * 100)}% of bookings` : 'No bookings yet', href: '#/my/orders?scope=all&group=cancelled&' + qs },
     ];
     // Things that need a person, counted.
     const returns = ((h.ops2 && h.ops2.returns) || []).filter((rt) => rt.status === 'REQUESTED');
@@ -656,7 +683,7 @@ module.exports = function register(routes, { send }, ctx, engine) {
     const steps = [
       ['type', 'Choose Personal or Business', !!p.account_type, '#/profile'],
       ['details', 'Add your name and email', !!(p.name && p.email), '#/profile'],
-      ['address', 'Save a pickup address', p.addresses.length > 0, '#/profile?tab=addresses'],
+      ['address', 'Save a pickup address', (p.addresses.length > 0 || !!p.business_address), '#/profile?tab=addresses'],
       ['method', 'Save a payment method', (h.instruments || []).length > 0 || !!p.upi, '#/profile?tab=payments'],
       ['money', 'Add money to your wallet', db.wallet.some((w) => w.type === 'credit'), '#/wallet'],
       ['first', 'Make your first booking', h.records.some((r) => !r.sample), '#/courier/book'],
@@ -695,6 +722,18 @@ module.exports = function register(routes, { send }, ctx, engine) {
     const ledger = db.wallet.filter((w) => (!type || w.type === type) && (!fDays || Date.parse(w.at) >= Date.now() - fDays * day) && w.amount >= fMin);
     send(res, 200, { balance: db.balance, added_30: inPeriod.filter((w) => w.type === 'credit').reduce((s, w) => s + w.amount, 0), spent_30: inPeriod.filter((w) => w.type === 'debit').reduce((s, w) => s + w.amount, 0), pay_on_delivery_due: due.reduce((s, r) => s + r.amount, 0), pay_on_delivery_count: due.length,
       series: points, by_section: SECTION_KEYS.map((k) => ({ section: k, amount: list.filter((r) => r.section === k && r.status !== 'CANCELLED' && r.pay_mode === 'prepaid' && Date.parse(r.at) >= m0).reduce((s, r) => s + r.amount, 0) })).filter((x) => x.amount).sort((a, b) => b.amount - a.amount), rule: h.wallet_rule, ...paginate(ledger, url) });
+  });
+  // Gift cards go into the wallet. Sandbox: any well-formed code works once, and its value comes from the code.
+  routes['POST /v1/hub/wallet/redeem'] = hub(({ res, body, db, h }) => {
+    const code = String(body.code || '').toUpperCase().replace(/[\s-]/g, '');
+    if (!/^[A-Z0-9]{12,20}$/.test(code)) throw oops(400, 'Enter the 12 to 20 character code printed on the gift card.');
+    h.redeemed = h.redeemed || [];
+    if (h.redeemed.includes(code)) throw oops(400, 'This gift card has already been added to your wallet.');
+    const tail = /(\d{3,4})$/.exec(code); const fixed = tail && [100, 250, 500, 1000, 2000, 5000].includes(Number(tail[1])) ? Number(tail[1]) : null;
+    const amount = fixed || [250, 500, 1000, 2000][crypto.createHash('md5').update(code).digest()[0] % 4];
+    h.redeemed.push(code);
+    credit(db, amount, `Gift card ${code.slice(0, 4)}…${code.slice(-4)} added`);
+    send(res, 200, { amount, wallet_balance: db.balance });
   });
   routes['POST /v1/hub/wallet/withdraw'] = hub(({ res, body, db, h }) => {
     const amount = Math.round(Number(body.amount));
@@ -1255,9 +1294,56 @@ module.exports = function register(routes, { send }, ctx, engine) {
   });
 
   // ---- profile -----------------------------------------------------------------------
+  // ---- workspace: which services this account sees (the rest stay one click away) ----
+  const WS_MODULES = ['vehicle', 'courier', 'logistics', 'international', 'services', 'returns', 'seller', 'business', 'travel', 'pay'];
+  const WS_FOCUS = {
+    deliver: ['vehicle', 'courier', 'returns', 'business'],
+    sell: ['courier', 'vehicle', 'returns', 'seller', 'business'],
+    freight: ['logistics', 'vehicle', 'international', 'returns', 'business'],
+    everyday: ['vehicle', 'travel', 'pay'],
+    all: WS_MODULES,
+  };
+  const WS_SECTION = { vehicle: 'vehicle', courier: 'courier', logistics: 'logistics', international: 'international', travel: 'travel', rides: 'travel', recharge: 'pay', bills: 'pay', business: 'pay' };
+  // Saved choice, or a starting point: the city-delivery focus plus anything this account has already used.
+  function workspaceOf(h) {
+    if (h.profile.workspace) return { ...h.profile.workspace, auto: false };
+    const used = [...new Set(h.records.filter((r) => !r.sample).map((r) => WS_SECTION[r.section]).filter(Boolean))];
+    const on = [...new Set([...WS_FOCUS.deliver, ...used])];
+    return { focus: on.length === WS_FOCUS.deliver.length ? 'deliver' : 'custom', on, auto: true, added: used.filter((k) => !WS_FOCUS.deliver.includes(k)) };
+  }
+  // ---- account deletion (DPDP): 7-day grace, then the account is erased ----------------
+  routes['POST /v1/hub/account/delete'] = hub(({ res, body, h, user }) => {
+    if (user.role && user.role !== 'owner') throw oops(403, 'Only the account owner can delete the account.');
+    if (String(body.confirm || '').trim().toUpperCase() !== 'DELETE') throw oops(400, 'Type DELETE to confirm.');
+    const now = Date.now();
+    h.profile.deletion = { requested_at: iso(now), purge_at: iso(now + 7 * day), reason: text(body.reason, 200) };
+    send(res, 200, { deletion: h.profile.deletion });
+  });
+  routes['POST /v1/hub/account/delete/cancel'] = hub(({ res, h }) => { h.profile.deletion = null; send(res, 200, { deletion: null }); });
+
+  // ---- safety: alert trusted contacts, or the UT safety team ----------------------------
+  routes['POST /v1/hub/safety/alert'] = hub(({ res, body, h, user }) => {
+    const r = h.records.find((x) => x.id === body.id);
+    if (!r) throw oops(404, 'We could not find that booking.');
+    const link = `/track/?id=${r.booking_id || r.id}`;
+    h.safety = h.safety || [];
+    if (body.kind === 'contacts') {
+      const list = h.profile.trusted || [];
+      if (!list.length) throw oops(400, 'Add a trusted contact first.', { need_contacts: true });
+      const ev = { id: newId('SF'), kind: 'contacts', order_id: r.id, at: iso(Date.now()), to: list.map((c) => c.name), link };
+      h.safety.unshift(ev);
+      return send(res, 200, { ...ev, message: `Live trip sent to ${list.map((c) => c.name).join(', ')} by SMS (sandbox).` });
+    }
+    if (body.kind === 'team') {
+      const ev = { id: newId('SOS'), kind: 'team', order_id: r.id, at: iso(Date.now()), note: text(body.note, 300), by: user.name || 'Customer', link, priority: 'P1' };
+      h.safety.unshift(ev);
+      return send(res, 200, { ...ev, message: 'The UT safety team has your trip and location. An agent will call you within 5 minutes (sandbox).' });
+    }
+    throw oops(400, 'Choose who to alert.');
+  });
   routes['GET /v1/hub/profile'] = hub(({ res, db, h, user }) => {
     if (!h.profile.name && user.name) h.profile.name = user.name;
-    send(res, 200, { ...h.profile, score: profileScore(h.profile, db), score_total: 7, apps: APPS.map(([key, name, group]) => ({ key, name, group, connected: !!h.profile.connected[key] })) });
+    send(res, 200, { ...h.profile, workspace: workspaceOf(h), score: profileScore(h.profile, db), score_total: 7, apps: APPS.map(([key, name, group]) => ({ key, name, group, connected: !!h.profile.connected[key] })) });
   });
   routes['POST /v1/hub/profile'] = hub(({ res, body, db, h, user }) => {
     const p = h.profile;
@@ -1274,16 +1360,54 @@ module.exports = function register(routes, { send }, ctx, engine) {
     if (body.currency != null) p.currency = text(body.currency, 3);
     if (body.theme != null) p.theme = body.theme === 'dark' ? 'dark' : 'light';
     if (body.twofa != null) p.twofa = !!body.twofa;
+    if (body.trusted) {
+      if (!Array.isArray(body.trusted) || body.trusted.length > 3) throw oops(400, 'Add up to 3 trusted contacts.');
+      p.trusted = body.trusted.map((c) => {
+        const name = text(c.name, 40); const phone = text(c.phone, 10);
+        if (name.length < 2) throw oops(400, 'Enter a name for each trusted contact.');
+        if (!/^[6-9]\d{9}$/.test(phone)) throw oops(400, `Enter a 10-digit mobile number for ${name}.`);
+        return { name, phone, relation: text(c.relation, 20) };
+      });
+    }
+    if (body.consents) {
+      p.consents = p.consents || { location: true, analytics: false, personalise: false };
+      p.consent_log = p.consent_log || [];
+      for (const k of ['location', 'analytics', 'personalise']) {
+        if (body.consents[k] == null || !!body.consents[k] === p.consents[k]) continue;
+        p.consents[k] = !!body.consents[k];
+        p.consent_log.unshift({ purpose: k, granted: p.consents[k], at: iso(Date.now()) });
+      }
+      p.consent_log = p.consent_log.slice(0, 50);
+    }
+    if (body.workspace) {
+      if (user.role && user.role !== 'owner') throw oops(403, 'Only the account owner can change the workspace.');
+      const focus = String(body.workspace.focus || 'custom');
+      if (focus !== 'custom' && !WS_FOCUS[focus]) throw oops(400, 'Pick a focus.');
+      const on = focus === 'custom' ? [...new Set((body.workspace.on || []).filter((k) => WS_MODULES.includes(k)))] : WS_FOCUS[focus];
+      if (!on.length) throw oops(400, 'Keep at least one service switched on.');
+      p.workspace = { focus, on };
+    }
     if (body.add_address) {
       const a = body.add_address;
-      if (text(a.line, 200).length < 8) throw oops(400, 'Enter the full address.');
+      if (text(a.line, 200).length < (a.house ? 2 : 8)) throw oops(400, 'Enter the full address.');
       if (!/^\d{6}$/.test(a.pincode || '')) throw oops(400, 'Enter a 6-digit pin code.');
-      p.addresses.push({ id: newId('AD'), label: text(a.label, 30) || 'Saved address', line: text(a.line, 200), city: text(a.city, 40), pincode: a.pincode });
+      const lat = Number(a.lat); const lng = Number(a.lng);
+      const pin = Number.isFinite(lat) && Number.isFinite(lng) && Math.abs(lat) <= 90 && Math.abs(lng) <= 180 ? { lat, lng } : {};
+      p.addresses.push({ id: newId('AD'), label: text(a.label, 30) || 'Saved address', line: text(a.line, 200), city: text(a.city, 40), pincode: a.pincode, ...pin, house: text(a.house, 80), street: text(a.street, 160), floor: text(a.floor, 10), lift: a.lift === true ? true : a.lift === false ? false : null, landmark: text(a.landmark, 80) });
     }
     if (body.remove_address) p.addresses = p.addresses.filter((a) => a.id !== body.remove_address);
+    if (body.business_address) {
+      const a = body.business_address; const line = text(a.line, 200); const city = text(a.city, 40); const pin = text(a.pincode, 6);
+      if (!line && !city && !pin) p.business_address = null;
+      else {
+        if (line.length < 8) throw oops(400, 'Enter the full business address (building, street, area).');
+        if (!/^\d{6}$/.test(pin)) throw oops(400, 'Enter a 6-digit pin code for the business address.');
+        p.business_address = { line, city, pincode: pin };
+      }
+    }
     if (body.name != null && p.name) user.name = p.name;
     if (body.email != null && p.email && !user.email) user.email = p.email;
-    send(res, 200, { ...p, score: profileScore(p, db), score_total: 7, apps: APPS.map(([key, name, group]) => ({ key, name, group, connected: !!p.connected[key] })) });
+    send(res, 200, { ...p, workspace: workspaceOf(h), score: profileScore(p, db), score_total: 7, apps: APPS.map(([key, name, group]) => ({ key, name, group, connected: !!p.connected[key] })) });
   });
 
   return { hub, hubOf, live, oops, text, takePayment, addRecord, offers };

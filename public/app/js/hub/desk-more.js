@@ -5,8 +5,8 @@ import { filterBtn, openFilters, countActive, downloadCsv, hbars, bars } from '.
 import { openTracking } from './tracking.js';
 import { cancelOne } from './orders.js';
 import { DESKS, subPills } from './desk.js';
+import { dateRangeField, mountDateRange, fromQuery, toQuery, toApi } from './daterange.js';
 
-const RANGES = [['7', 'Last 7 days'], ['30', 'Last 30 days'], ['90', 'Last 90 days'], ['', 'All time']];
 const DOWNLOAD = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11M7 11l5 5 5-5M4 20h16"/></svg>';
 const empty = (text) => `<div class="empty-scene">${scene('orders').value}<p>${esc(text)}</p></div>`;
 const table = (head, rows) => `<div class="table-wrap"><table class="orders"><thead><tr>${head.map((h) => `<th>${esc(h)}</th>`).join('')}</tr></thead><tbody>${rows.map((r) => `<tr>${r.map((c) => `<td>${esc(c)}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`;
@@ -16,12 +16,12 @@ const VIEWS = [['overview', 'Overview'], ['partners', 'Partners'], ['routes', 'R
 export async function analyticsTab(body, key, query) {
   const c = DESKS[key];
   const view = query.get('view') || 'overview';
-  const days = query.get('days') == null ? '30' : query.get('days');
+  const range = fromQuery(query, 'last30');
   const sub = query.get('sub') || '';
   const pay = query.get('pay') || '';
-  const link = (patch) => { const q = new URLSearchParams({ view, days, sub, pay, ...patch }); [...q.keys()].forEach((k) => { if (!q.get(k) && k !== 'days') q.delete(k); }); return `${c.base}/analytics?${q}`; };
+  const link = (patch) => { const q = new URLSearchParams({ view, sub, pay, ...toQuery(range), ...patch }); [...q.keys()].forEach((k) => { if (!q.get(k)) q.delete(k); }); return `${c.base}/analytics?${q}`; };
   body.innerHTML = '<div class="skeleton" style="height:300px"></div>';
-  const d = await api('/hub/desk/analytics', { query: { desk: key, days, sub, pay } });
+  const d = await api('/hub/desk/analytics', { query: { desk: key, ...toApi(range), sub, pay } });
   const fields = [{ key: 'pay', label: 'Payment', options: [['', 'All payments'], ['prepaid', 'Prepaid'], ['cod', 'Pay on delivery']] }];
   const partnerRows = d.providers.map((p) => [p.name, p.orders, money(p.spend), p.delivered, p.cancelled, `${p.success}%`]);
   const routeRows = d.routes.map((r) => [r.name, r.orders, money(r.spend)]);
@@ -32,13 +32,13 @@ export async function analyticsTab(body, key, query) {
     routes: () => (d.routes.length ? `<section class="card">${table(['Route or reference', 'Orders', 'Spend'], routeRows)}</section>` : empty('No routes in this period.')),
     payments: () => (d.orders ? `<div class="dash dash--even"><section class="card">${table(['Method', 'Orders', 'Amount'], payRows)}</section><aside class="dash__side"><section class="card"><h2>Amount by method</h2>${hbars(d.payments)}</section></aside></div>` : empty('No payments in this period.')),
   };
-  body.innerHTML = `<div class="desk-bar"><span class="spacer"></span><button class="btn btn-soft" id="csv" type="button">${DOWNLOAD}Download Report</button><select class="select desk-days" id="days" aria-label="Date range">${RANGES.map(([v, l]) => `<option value="${v}" ${v === days ? 'selected' : ''}>${l}</option>`).join('')}</select>${filterBtn(countActive(fields, { pay }))}</div>
+  body.innerHTML = `<div class="desk-bar"><span class="spacer"></span><button class="btn btn-soft" id="csv" type="button">${DOWNLOAD}Download Report</button>${dateRangeField(range)}${filterBtn(countActive(fields, { pay }))}</div>
     ${subPills(c, sub, (k) => link({ sub: k }))}
     <nav class="tabs tabs--line">${VIEWS.map(([k, l]) => `<a href="${link({ view: k })}" class="${k === view ? 'active' : ''}">${l}</a>`).join('')}</nav>
     ${(panes[view] || panes.overview)()}`;
   const chart = body.querySelector('#anBars');
   if (chart) bars(chart, d.series, 'Daily spend');
-  body.querySelector('#days').addEventListener('change', (e) => { location.hash = link({ days: e.target.value }); });
+  mountDateRange(body, range, (v) => { location.hash = link(toQuery(v)); });
   body.querySelector('#flt').addEventListener('click', (e) => openFilters(e.currentTarget, fields, { pay }, (v) => { location.hash = link(v); }));
   body.querySelector('#csv').addEventListener('click', () => {
     const head = view === 'routes' ? [['Route', 'Orders', 'Spend INR'], ...d.routes.map((r) => [r.name, r.orders, r.spend])] : view === 'payments' ? [['Method', 'Orders', 'Amount INR'], ...d.payments.map((p) => [p.name, p.orders, p.amount])] : [['Partner', 'Orders', 'Spend INR', 'Completed', 'Cancelled', 'Success %'], ...d.providers.map((p) => [p.name, p.orders, p.spend, p.delivered, p.cancelled, p.success])];

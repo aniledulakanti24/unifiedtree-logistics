@@ -16,9 +16,11 @@
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400..800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="app.css?v=10">
   <link rel="stylesheet" href="hub.css?v=17">
-  <link rel="stylesheet" href="crm.css?v=16">
+  <link rel="stylesheet" href="crm.css?v=30">
+  <link rel="stylesheet" href="../css/ut-tree.css?v=4">
 </head>
 <body>
+  <div class="boot" id="boot" role="status" aria-label="Loading UT Log"><div class="boot__tree" data-ut-tree="boot" data-now></div><b>UT Log</b><span>Getting your workspace ready…</span></div>
   <a class="skip-link" href="#view">Skip to content</a>
   <div class="shell">
     <aside class="side" id="side" aria-label="Main navigation">
@@ -50,6 +52,7 @@
   <div id="gtHost" hidden></div>
   <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
   <div id="modalRoot"></div>
+  <script src="../js/ut-tree.js?v=2"></script>
   <script type="module" src="js/main.js"></script>
 </body>
 </html>

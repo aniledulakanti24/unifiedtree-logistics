@@ -30,7 +30,7 @@
       <a href="/" class="brand"><img src="/assets/logo.svg" alt="UT Log" width="124" height="32"></a>
       <nav class="bookNav" aria-label="Main"><a href="/book/" target="_blank" rel="noopener">Book a delivery</a><a href="/track/" target="_blank" rel="noopener">Track</a><a href="/pricing/" target="_blank" rel="noopener">Pricing</a><a href="/partners/" target="_blank" rel="noopener" aria-current="page">Partner with us</a></nav>
       <span style="flex:1"></span>
-      <a href="/#signup" class="btn btn-ghost">Seller login</a>
+      <a href="/driver/" class="btn btn-ghost">Open partner app</a>
     </div>
   </header>
   <main class="bookPage">
@@ -39,6 +39,7 @@
       <h1>Your vehicle. <span class="grad">More jobs.</span></h1>
       <p class="lead">Bike riders, three-wheeler and truck owners, transport agencies and contractors — join the UT Log network and get bookings in your city.</p>
       <div class="stats" id="stats"></div>
+      <p style="margin-top:18px"><a class="btn btn-primary" href="/driver/">Drive with the UT Partner app</a> <span class="muted" style="margin-left:8px">For individual drivers: sign up in 3 minutes, take trips and get paid to UPI.</span></p>
     </div></section>
     <div class="container pGrid">
       <div>
@@ -89,7 +90,7 @@
         fetch('/v1/public/partners', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
           .then(function (r) { return r.json().then(function (d) { if (!r.ok) throw new Error(d.message); return d; }); })
           .then(function (d) {
-            form.innerHTML = '<div class="success"><div class="tick">✓</div><h2 style="margin:0 0 6px">Welcome aboard</h2><p class="muted">Partner ID <b class="mono">' + esc(d.id) + '</b></p><p class="muted">' + esc(d.message) + '</p><a class="btn btn-primary btn-block" href="/book/">See a booking as a customer</a></div>';
+            form.innerHTML = '<div class="success"><div class="tick">✓</div><h2 style="margin:0 0 6px">Welcome aboard</h2><p class="muted">Partner ID <b class="mono">' + esc(d.id) + '</b></p><p class="muted">' + esc(d.message) + '</p><a class="btn btn-primary btn-block" href="/driver/">Open the UT Partner app</a><a class="btn btn-ghost btn-block" href="/book/" style="margin-top:8px">See a booking as a customer</a></div>';
             stats();
           })
           .catch(function (err) { $('#pErr').textContent = err.message; });

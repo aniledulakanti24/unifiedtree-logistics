@@ -2,11 +2,13 @@
 import { api, esc, money, modal, toast, store } from '../core.js';
 import { duo } from './art.js';
 import { addInstrument, payCatalog, TYPES } from './instruments.js';
+import { isPhone, intentPanel } from './upi.js';
 
 export const PAY_LABEL = { wallet: 'Wallet', upi: 'UPI', card: 'Card', emi: 'EMI', netbanking: 'Netbanking', paylater: 'Pay Later', ewallet: 'Other wallet', giftcard: 'Gift card', neft: 'Bank transfer' };
 const METHODS = [['wallet', 'Wallet', 'Your UT Log balance', 'wallet'], ['upi', 'UPI', 'Any UPI app or ID', 'phone'], ['card', 'Card', 'Credit or debit', 'card'], ['emi', 'EMI', 'Pay monthly', 'calendar'], ['netbanking', 'Netbanking', 'Your bank', 'bank'], ['paylater', 'Pay Later', 'Pay next month', 'receipt'], ['ewallet', 'Other wallets', 'Paytm, Amazon Pay', 'cash'], ['giftcard', 'Gift card', 'Redeem a card', 'gift'], ['neft', 'Bank transfer', 'NEFT or RTGS', 'building']];
 const NO_CARD = ['card', 'emi', 'paylater', 'giftcard'];
 
+export const BOOKING_PAY = ['wallet', 'upi', 'card'];
 export const payMethods = ({ card = true, only = null } = {}) => { const business = store.state.accountType === 'business'; return `<div class="field full"><span>Pay with</span><div class="pay2 pay4" role="radiogroup" aria-label="Payment method">${METHODS.filter(([k]) => (only ? only.includes(k) : (card || !NO_CARD.includes(k)) && (business || k !== 'neft'))).map(([k, l, s, i], n) => `<label class="pay"><input type="radio" name="pm" value="${k}" ${n ? '' : 'checked'}>${duo(i).value}<span><b>${l}</b><small>${s}</small></span></label>`).join('')}</div></div>`; };
 
 const qr = (seed) => { let h = 0; for (const c of seed) h = (h * 31 + c.charCodeAt(0)) >>> 0; let out = ''; for (let y = 0; y < 21; y++) for (let x = 0; x < 21; x++) { h = (h * 1664525 + 1013904223) >>> 0; const corner = (x < 7 && y < 7) || (x > 13 && y < 7) || (x < 7 && y > 13); if (corner ? (x % 6 === 0 || y % 6 === 0 || ((x % 14) > 1 && (x % 14) < 5 && (y % 14) > 1 && (y % 14) < 5)) : (h >> 16) & 1) out += `<rect x="${x}" y="${y}" width="1" height="1"/>`; } return `<svg class="qr" viewBox="0 0 21 21" aria-label="Sandbox payment code">${out}</svg>`; };
@@ -48,7 +50,8 @@ export async function checkout(root, amount) {
           const p = await api('/hub/checkout/intent', { method: 'POST', body });
           const isQr = body.detail === 'qr';
           const text = isQr ? 'Scan this code with any UPI app' : method === 'upi' ? `Approve the request on ${p.detail}` : `Confirm the payment with ${p.detail}`;
-          el.querySelector('.modal__body').innerHTML = `<div class="gateway">${isQr ? qr(p.id) : '<span class="spinner"></span>'}<b translate="no">${esc(money(p.amount))}</b><p>${esc(text)}</p><small class="muted mono">${esc(p.id)}</small></div><p class="callout">Sandbox: choose how this test payment ends.</p><p class="form-error" id="g"></p>`;
+          const handoff = method === 'upi' && !isQr && isPhone();
+          el.querySelector('.modal__body').innerHTML = handoff ? `${intentPanel({ app: p.detail, amount: p.amount, ref: p.id })}<p class="callout">Sandbox: nothing is charged. Choose how this test payment ends.</p><p class="form-error" id="g"></p>` : `<div class="gateway">${isQr ? qr(p.id) : '<span class="spinner"></span>'}<b translate="no">${esc(money(p.amount))}</b><p>${esc(text)}</p><small class="muted mono">${esc(p.id)}</small></div><p class="callout">Sandbox: choose how this test payment ends.</p><p class="form-error" id="g"></p>`;
           el.querySelector('.modal__foot').innerHTML = '<button class="btn btn-outline" id="no">Simulate failure</button><button class="btn btn-primary" id="ok">Simulate success</button>';
           const finish = async (r) => {
             try { await api('/hub/checkout/confirm', { method: 'POST', body: { id: p.id, result: r } }); if (r === 'success') close(p.id); else { toast('Payment failed. Nothing was charged.', true); close(null); } }

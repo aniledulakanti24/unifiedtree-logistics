@@ -31,10 +31,11 @@
     a { color: var(--brand-ink); }
     .hidden { display: none !important; }
 
-    .login { display: grid; grid-template-columns: 1fr 1fr; min-height: 100vh; }
+    .login { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); min-height: 100vh; }
     /* Left: brand panel */
     .login-art { position: relative; overflow: hidden; display: flex; flex-direction: column; justify-content: space-between; gap: 32px; padding: 40px; background: var(--side); color: #dfeae7; }
-    .login-art .net { position: absolute; right: -150px; bottom: -170px; width: 620px; max-width: 110%; opacity: .32; pointer-events: none; }
+    .login-art .art-tree { position: absolute; right: -30px; bottom: -40px; width: 420px; max-width: 70%; opacity: .92; pointer-events: none; }
+    .login-art .art-copy, .login-art .brand, .login-art .art-foot { position: relative; z-index: 1; }
     .brand { position: relative; display: flex; align-items: center; gap: 10px; color: #fff; font-weight: 650; font-size: 15px; text-decoration: none; }
     .brand img { width: 32px; height: 32px; }
     .art-copy { position: relative; }
@@ -75,8 +76,8 @@
     .social-btn.back { width: 100%; margin-top: 10px; }
     .link, .link-btn { color: var(--brand-ink); font-weight: 600; cursor: pointer; background: none; border: 0; padding: 0; }
     .link-btn { display: block; margin: 10px auto 0; font-size: 13px; }
-    .otp-row { display: grid; grid-template-columns: repeat(6, 1fr); gap: 8px; margin: 4px 0 8px; }
-    .otp-digit { height: 48px; text-align: center; font-size: 20px; font-weight: 650; border: 1px solid var(--line-strong); border-radius: 8px; background: var(--surface); }
+    .otp-row { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 8px; margin: 4px 0 8px; }
+    .otp-digit { width: 100%; min-width: 0; height: 48px; text-align: center; font-size: 20px; font-weight: 650; border: 1px solid var(--line-strong); border-radius: 8px; background: var(--surface); }
     .resend { margin: 4px 0; font-size: 12.5px; color: var(--ink-3); }
     .error { margin: 6px 0 0; color: var(--bad); font-size: 12.5px; min-height: 0; }
     .error:empty, .success:empty { display: none; }
@@ -101,24 +102,19 @@
     @media (max-width: 900px) {
       .login { grid-template-columns: 1fr; }
       .login-art { padding: 22px 20px 26px; gap: 14px; }
-      .login-art .net, .art-points, .art-foot { display: none; }
+      .login-art .art-tree, .art-points, .art-foot { display: none; }
       .art-copy h1 { font-size: 24px; }
       .art-copy p { font-size: 13px; }
       .login-form { justify-content: flex-start; padding: 24px 16px 40px; }
     }
     @media (prefers-reduced-motion: no-preference) { .login-box { animation: rise .35s ease-out both; } @keyframes rise { from { opacity: 0; transform: translateY(8px); } } }
   </style>
+  <link rel="stylesheet" href="../css/ut-tree.css?v=4">
 </head>
 <body>
 <main class="login">
   <section class="login-art" aria-label="About UT Log">
-    <svg class="net" viewBox="0 0 640 640" aria-hidden="true" fill="none" stroke="#7fd6bf" stroke-width="1.400">
-      <path d="M90 520 250 400 400 450 560 300M250 400 300 250 470 200 600 90M300 250 140 210 60 90M400 450 470 600M470 200 560 300M140 210 250 400" stroke-dasharray="2 7"/>
-      <g fill="#0f2925" stroke-width="1.600"><circle cx="90" cy="520" r="7"/><circle cx="250" cy="400" r="9"/><circle cx="400" cy="450" r="7"/><circle cx="560" cy="300" r="9"/><circle cx="300" cy="250" r="8"/><circle cx="470" cy="200" r="7"/><circle cx="600" cy="90" r="6"/><circle cx="140" cy="210" r="7"/><circle cx="60" cy="90" r="6"/><circle cx="470" cy="600" r="6"/></g>
-      <g stroke-width="1.800"><path d="M236 392h20v12h-20zM256 396h6l3 4v4h-9z"/><circle cx="241" cy="406" r="2.500"/><circle cx="259" cy="406" r="2.500"/></g>
-      <g stroke-width="1.800"><path d="M552 296l6-4 8 3-5 4zM556 296v8l6 3"/></g>
-      <g stroke-width="1.800"><path d="M292 244l8-4 8 4v8l-8 4-8-4zM292 244l8 4 8-4M300 248v8"/></g>
-    </svg>
+    <div class="art-tree" data-ut-tree="login" aria-hidden="true"></div>
     <a class="brand" href="/"><img src="../assets/favicon.svg" alt="" width="32" height="32">UT Log</a>
     <div class="art-copy">
       <h1>Every shipment, ticket and bill on one wallet.</h1>
@@ -237,6 +233,7 @@
   </section>
 </main>
 <script src="../js/signup-form.js?v=36"></script>
+<script src="../js/ut-tree.js?v=2"></script>
 <script>
 // Demo accounts: one click signs in with a sample profile. Works only where the server exposes
 // test codes (development and the sandbox); in production the server never returns them.
@@ -244,8 +241,8 @@
   'use strict';
   var DEMOS = {
     personal: { mobile: '9000000101', profile: { account_type: 'personal', name: 'Asha Rao', email: 'asha.demo@utlog.in' } },
-    business: { mobile: '9000000102', profile: { account_type: 'business', name: 'Vikram Mehta', email: 'vikram.demo@utlog.in', company: 'Mehta Traders' } },
-    logistics: { mobile: '9000000103', profile: { account_type: 'business', name: 'Sana Khan', email: 'sana.demo@utlog.in', company: 'Swift Movers' }, land: '/app/#/logistics' },
+    business: { mobile: '9000000102', profile: { account_type: 'business', name: 'Vikram Mehta', email: 'vikram.demo@utlog.in', company: 'Mehta Traders', business_address: { line: '14, Mamulpet Main Road, Chickpet', city: 'Bengaluru', pincode: '560053' } } },
+    logistics: { mobile: '9000000103', profile: { account_type: 'business', name: 'Sana Khan', email: 'sana.demo@utlog.in', company: 'Swift Movers', business_address: { line: '3rd Floor, 80 Feet Road, Koramangala 4th Block', city: 'Bengaluru', pincode: '560034' } }, land: '/app/#/logistics' },
   };
   var err = document.getElementById('demoErr');
   function post(path, body, token) {

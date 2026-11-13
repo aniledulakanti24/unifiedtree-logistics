@@ -1,5 +1,6 @@
 // "Your account" panel, the My profile page, and notifications.
 import { api, esc, money, store, toast, logout, getCurrency, withBusy, formData, dateTime, modal } from '../core.js';
+import { openPlacePicker, floorText } from './places.js';
 
 function downloadJson(name, data) {
   const url = URL.createObjectURL(new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' }));
@@ -10,7 +11,7 @@ import { duo, tile } from './art.js';
 import { icon } from './icons.js';
 import { mountInstruments } from './instruments.js';
 import { installApp } from './experience.js';
-import { LANGUAGES, getLanguage, getTheme, setTheme, setAccountType, openLanguageMenu, openCurrencyMenu } from './prefs.js';
+import { LANGUAGES, getLanguage, getTheme, setTheme, setAccountType, askBusinessDetails, openLanguageMenu, openCurrencyMenu } from './prefs.js';
 
 // ---- summary (profile score + bell) --------------------------------------------------
 export async function refreshSummary() {
@@ -40,10 +41,13 @@ const avatar = (name, cls = '') => `<span class="pf-av ${cls}" style="background
 const CHEV = icon('chevron', 16).replace('class="li"', 'class="li acc-chev"');
 const row = ([i, t, s, h]) => `<a class="acc-row" href="${h}"><span class="acc-ico">${icon(i, 18)}</span><span class="grow"><b>${esc(t)}</b><small>${esc(s)}</small></span>${CHEV}</a>`;
 const ACCOUNT_ROWS = [
+  ['dashboard', 'Workspace', 'Choose the services you see', '#/workspace'],
   ['map', 'Saved addresses', 'Pickup and drop places', '#/profile?tab=addresses'],
   ['card', 'Payment methods', 'UPI, cards, banks and wallets', '#/profile?tab=payments'],
   ['bell', 'Notifications', 'What you hear about, and where', '#/profile?tab=notifications'],
   ['shield', 'Security', 'Two-step sign-in, password, devices', '#/profile?tab=security'],
+  ['users', 'Safety', 'Trusted contacts for live trips', '#/profile?tab=safety'],
+  ['file', 'Privacy & data', 'Consents, download, delete account', '#/profile?tab=privacy'],
   ['clock', 'Activity log', 'Every change, by everyone', '#/activity'],
 ];
 const BUSINESS_ROWS = [
@@ -90,7 +94,7 @@ export function openDrawer() {
     const t = e.target.closest('[data-th]');
     if (t) { setTheme(t.dataset.th); wrap.querySelectorAll('[data-th]').forEach((b) => b.setAttribute('aria-pressed', String(b === t))); return; }
     const a = e.target.closest('[data-a]');
-    if (a && a.dataset.a !== store.state.accountType) { try { await setAccountType(a.dataset.a); toast(`Switched to ${a.dataset.a} account`); close(); window.dispatchEvent(new CustomEvent('ut:account')); } catch (x) { toast(x.message, true); } return; }
+    if (a && a.dataset.a !== store.state.accountType) { try { await setAccountType(a.dataset.a); toast(`Switched to ${a.dataset.a} account`); close(); if (a.dataset.a === 'business' && !(store.state.profile || {}).business_address) askBusinessDetails(); window.dispatchEvent(new CustomEvent('ut:account')); } catch (x) { toast(x.message, true); } return; }
     if (e.target.closest('#pLang')) { openLanguageMenu(e.target.closest('#pLang')); return; }
     if (e.target.closest('#pCur')) { openCurrencyMenu(e.target.closest('#pCur')); return; }
     if (e.target.closest('#lo')) logout();
@@ -163,25 +167,26 @@ export async function render(view, { query }) {
       </section>
       ${card('app', 'Mobile app', 'Put UT Log on your phone or computer, with its own icon and window.', `<p class="notop">In your browser menu, choose <b>Install app</b> or <b>Add to Home screen</b>. On Android, use Chrome.</p><p class="muted small">It is the same UT Log, not a separate store app.</p><button class="btn btn-outline" id="inst" type="button">${icon('phone', 16)}Install app</button>`)}
       ${card('details', 'Your details', 'Used on bookings, tickets and receipts.', `<form class="form-grid" novalidate>${field('name', 'Full name *', p.name, 'autocomplete="name"')}${field('email', 'Email', p.email, 'type="email" autocomplete="email"')}${field('mobile', 'Mobile number', p.mobile, 'inputmode="numeric" maxlength="10"')}${field('dob', 'Date of birth', p.dob, 'type="date"')}${footer()}</form>`)}
-      ${business ? card('business', 'Business details', 'Used on invoices and for B2B freight.', `<form class="form-grid" novalidate>${field('company', 'Company name', p.company)}${field('industry', 'Industry', p.industry)}${field('gstin', 'GSTIN', p.gstin, 'maxlength="15" style="text-transform:uppercase"')}${field('pan', 'PAN', p.pan, 'maxlength="10" style="text-transform:uppercase"')}${field('iec', 'Import Export Code', p.iec)}${field('employees', 'Team size', p.employees)}${footer()}</form>`) : ''}
+      ${business ? card('business', 'Business details', 'Used on invoices and for B2B freight.', `<form class="form-grid" novalidate>${field('company', 'Company name', p.company)}${field('industry', 'Industry', p.industry)}${field('gstin', 'GSTIN', p.gstin, 'maxlength="15" style="text-transform:uppercase"')}${field('pan', 'PAN', p.pan, 'maxlength="10" style="text-transform:uppercase"')}${field('iec', 'Import Export Code', p.iec)}${field('employees', 'Team size', p.employees)}<label class="field full">Business address<textarea class="input" name="ba_line" rows="2" placeholder="Building, street, area">${esc((p.business_address || {}).line || '')}</textarea><small class="muted">Used as the pickup address when you book.</small></label>${field('ba_city', 'City', (p.business_address || {}).city)}${field('ba_pincode', 'Pin code', (p.business_address || {}).pincode, 'inputmode="numeric" maxlength="6"')}${footer()}</form>`) : ''}
       ${card('format', 'My number and date format', 'Only for you. Changes how amounts, dates and times look.', `<form class="form-grid" id="fmtF" novalidate><label class="field full">Number and date format<select class="select" name="loc">${FORMATS.map(([v, l]) => `<option value="${v}" ${read('ut-date-locale', 'en-IN') === v ? 'selected' : ''}>${esc(l)}</option>`).join('')}</select></label><label class="field">Clock<select class="select" name="clock"><option value="12" ${read('ut-clock', '12') === '12' ? 'selected' : ''}>12-hour (3:30 pm)</option><option value="24" ${read('ut-clock', '12') === '24' ? 'selected' : ''}>24-hour (15:30)</option></select></label><label class="field">Week starts on<select class="select" name="week"><option value="0" ${read('ut-week-start', '0') === '0' ? 'selected' : ''}>Sunday</option><option value="1" ${read('ut-week-start', '0') === '1' ? 'selected' : ''}>Monday</option></select></label><p class="muted small full notop" id="fmtEx">Looks like: ${esc(dateTime(new Date().toISOString()))}</p></form>`)}
       ${card('alerts', 'Language and look', 'Applies across the app.', `<div class="pf-list"><button class="acc-row" id="pfLang" type="button"><span class="acc-ico">${icon('globe', 18)}</span><span class="grow"><b>Language</b><small translate="no">${esc((LANGUAGES.find((l) => l[0] === getLanguage()) || LANGUAGES[0])[1])}</small></span>${CHEV}</button><button class="acc-row" id="pfCur" type="button"><span class="acc-ico">${icon('rupee', 18)}</span><span class="grow"><b>Currency</b><small translate="no">${esc(getCurrency())}</small></span>${CHEV}</button><div class="acc-row acc-row--static"><span class="acc-ico">${icon('sun', 18)}</span><span class="grow"><b>Theme</b></span><div class="seg" role="group" aria-label="Theme"><button type="button" data-th="light" aria-pressed="${getTheme() === 'light'}">Light</button><button type="button" data-th="dark" aria-pressed="${getTheme() === 'dark'}">Dark</button></div></div></div>`)}
-      ${card('addresses', 'Saved addresses', 'Pick them in one tap when you book.', `${p.addresses.length ? `<ul class="addr">${p.addresses.map((a) => `<li>${tile('pin', 'plain').value}<div class="grow"><b>${esc(a.label)}</b><small class="muted block">${esc(a.line)}, ${esc(a.city)} ${esc(a.pincode)}</small></div><button class="btn btn-outline btn-sm" data-rm="${esc(a.id)}" type="button">Remove</button></li>`).join('')}</ul>` : '<p class="muted notop">No saved addresses yet.</p>'}<details class="pf-add" ${p.addresses.length ? '' : 'open'}><summary>+ Add an address</summary><form class="form-grid mt-s" novalidate>${field('label', 'Label', '', 'placeholder="Home, Office, Warehouse"')}${field('city', 'City', '')}<label class="field full">Address<textarea class="input" name="line" rows="2"></textarea></label>${field('pincode', 'Pin code', '', 'inputmode="numeric" maxlength="6"')}${footer('Add address')}</form></details>`)}
+      ${card('addresses', 'Saved addresses', 'Pick them in one tap when you book.', `${p.addresses.length ? `<ul class="addr">${p.addresses.map((a) => `<li>${tile('pin', 'plain').value}<div class="grow"><b>${esc(a.label)}</b><small class="muted block">${esc(a.line)}, ${esc(a.city)} ${esc(a.pincode)}</small>${a.lat ? `<small class="pf-pinned">${icon('pin', 13)}Pinned on map${a.floor ? ` · ${esc(floorText(a.floor))}` : ''}${a.lift === true ? ' · lift' : a.lift === false ? ' · no lift' : ''}</small>` : ''}</div><button class="btn btn-outline btn-sm" data-rm="${esc(a.id)}" type="button">Remove</button></li>`).join('')}</ul>` : '<p class="muted notop">No saved addresses yet.</p>'}<button class="btn btn-primary btn-sm pf-addmap" type="button" data-addmap>${icon('pin', 16)}Add a place on the map</button><details class="pf-add"><summary>Or type an address</summary><form class="form-grid mt-s" novalidate>${field('label', 'Label', '', 'placeholder="Home, Office, Warehouse"')}${field('city', 'City', '')}<label class="field full">Address<textarea class="input" name="line" rows="2"></textarea></label>${field('pincode', 'Pin code', '', 'inputmode="numeric" maxlength="6"')}${footer('Add address')}</form></details>`)}
       ${card('notifications', 'Notifications', business ? 'For you. Team alerts live in Business notifications.' : 'Choose what you hear about, and where.', `<ul class="toggles">${NOTES.map(([k, t, d]) => `<li><div><b>${esc(t)}</b><small class="muted block">${esc(d)}</small></div><label class="switch"><input type="checkbox" data-n="${k}" ${p.notifications[k] ? 'checked' : ''} aria-label="${esc(t)}"><i></i></label></li>`).join('')}</ul>${business ? '<a class="link" href="#/business/notifications">Business notifications →</a>' : ''}`)}
       ${card('payments', 'Payment methods', 'Saved for faster checkout. Cards keep only the last 4 digits.', `<div id="ins"></div><h3 class="pf-sub">Withdrawal account</h3><p class="muted small notop">Money you withdraw from your wallet goes here.</p><form class="form-grid" id="wdF" novalidate>${field('upi', 'UPI ID', p.upi, 'placeholder="name@bank"')}${field('holder', 'Account holder', p.bank.holder)}${field('account', 'Account number', p.bank.account, 'inputmode="numeric"')}${field('ifsc', 'IFSC', p.bank.ifsc, 'maxlength="11" style="text-transform:uppercase"')}${footer()}</form>`, true)}
       ${sec ? card('security', 'Two-step sign-in', sec.has_password ? 'After your password, enter a code sent to your mobile or email.' : 'Built into how you sign in.', sec.has_password ? `<div class="pf-status"><span class="badge ${sec.twofa ? 'badge-green' : ''}">${sec.twofa ? 'On' : 'Off'}</span><span class="grow muted small">${sec.twofa ? 'A code is asked for every email sign-in.' : 'Recommended for business accounts.'}</span><button class="btn ${sec.twofa ? 'btn-outline' : 'btn-primary'}" id="tf" type="button">${sec.twofa ? 'Turn off' : 'Turn on'}</button></div>` : '<p class="notop">You sign in with a one-time code sent to your mobile, so every sign-in is already two-step. Nothing to set up.</p>') : ''}
       ${sec ? card('password', 'Password', sec.has_password ? 'At least 8 characters, with a number.' : 'Not used for your account.', sec.has_password ? `<form class="form-grid" id="pwF" novalidate><label class="field full">Current password<input class="input" type="password" name="current" autocomplete="current-password"></label><label class="field">New password<input class="input" type="password" name="next" autocomplete="new-password"></label><label class="field">Confirm new password<input class="input" type="password" name="again" autocomplete="new-password"></label><p class="form-error full"></p><div class="full"><button class="btn btn-primary" type="submit">Change password</button></div></form>` : `<p class="notop">You sign in with a one-time code to <b>+91 ${esc(String(p.mobile || '').replace(/^(\d{2})\d{4}/, '$1••••'))}</b>. There is no password to remember or leak.</p>`) : ''}
       ${sec ? card('devices', 'Where you are signed in', `${sec.sessions.length} ${sec.sessions.length === 1 ? 'device' : 'devices'}`, `<ul class="feed">${[...sec.sessions].sort((a, b) => Number(b.current) - Number(a.current)).slice(0, 5).map((s) => `<li><span class="acc-ico">${icon(s.current ? 'phone' : 'columns', 18)}</span><div class="feed__t"><b>${esc(s.device)}</b><small>Session ${esc(s.id)}…</small></div>${s.current ? '<span class="badge badge-green">This device</span>' : ''}</li>`).join('')}</ul>${sec.sessions.length > 5 ? `<p class="muted small">And ${sec.sessions.length - 5} more.</p>` : ''}${sec.sessions.length > 1 ? '<button class="btn btn-outline mt-s" id="revoke" type="button">Sign out other devices</button>' : ''}`) : ''}
-      ${card('data', 'Your data', 'Take a copy, or see what changed.', `<p class="notop">Download your profile, saved addresses, payment methods (last 4 digits only) and every order as a file.</p><div class="row"><button class="btn btn-outline" id="dl2" type="button">${icon('download', 16)}Download my data</button><a class="btn btn-outline" href="#/activity">${icon('clock', 16)}Activity log</a><button class="btn btn-outline pf-out" id="lo" type="button">${icon('logout', 16)}Log out</button></div>`)}
+      ${card('safety', 'Safety', 'People who get your live trip in one tap.', safetyBody(p))}
+      ${card('data', 'Privacy & data', 'What we use, why, and your controls.', privacyBody(p), true)}
     </div>`;
   // Forms
   const sectionOf = (id) => view.querySelector(`#pf-${id}`);
   formSave(sectionOf('details'), (d) => d, again);
-  if (business) formSave(sectionOf('business'), (d) => d, again);
+  if (business) formSave(sectionOf('business'), ({ ba_line, ba_city, ba_pincode, ...d }) => ({ ...d, business_address: { line: ba_line, city: ba_city, pincode: ba_pincode } }), again);
   formSave(sectionOf('addresses'), (d) => ({ add_address: d }), again, 'Address added');
   formSave(sectionOf('payments').querySelector('#wdF').parentElement, (d) => ({ upi: d.upi, bank: { holder: d.holder, account: d.account, ifsc: d.ifsc } }), again);
   mountInstruments(view.querySelector('#ins'));
-  sectionOf('addresses').addEventListener('click', async (e) => { const b = e.target.closest('[data-rm]'); if (b) { await save({ remove_address: b.dataset.rm }); toast('Address removed'); again(); } });
+  sectionOf('addresses').addEventListener('click', async (e) => { if (e.target.closest('[data-addmap]')) { const pl = await openPlacePicker({ kind: 'place', saveDefault: true }); if (pl) again(); return; } const b = e.target.closest('[data-rm]'); if (b) { await save({ remove_address: b.dataset.rm }); toast('Address removed'); again(); } });
   sectionOf('notifications').addEventListener('change', async (e) => { const k = e.target.dataset.n; if (k) { await save({ notifications: { [k]: e.target.checked } }); toast('Saved'); } });
   // Format
   view.querySelector('#fmtF').addEventListener('change', (e) => {
@@ -211,9 +216,30 @@ export async function render(view, { query }) {
   view.querySelector('#dl').addEventListener('click', dl);
   view.querySelector('#dl2').addEventListener('click', dl);
   view.querySelector('#lo').addEventListener('click', logout);
+  // Safety: trusted contacts (up to 3).
+  const sf = sectionOf('safety');
+  sf.addEventListener('click', async (e) => {
+    const rm = e.target.closest('[data-rm-tc]');
+    if (rm) { const list = (p.trusted || []).filter((_, i) => String(i) !== rm.dataset.rmTc); try { await save({ trusted: list }); toast('Contact removed'); again(); } catch (x) { toast(x.message, true); } }
+  });
+  const tcF = sf.querySelector('form');
+  if (tcF) tcF.addEventListener('submit', async (e) => {
+    e.preventDefault(); const d = formData(tcF); const err = tcF.querySelector('.form-error'); err.textContent = '';
+    await withBusy(tcF.querySelector('[type=submit]'), async () => { try { await save({ trusted: [...(p.trusted || []), { name: d.tc_name, phone: d.tc_phone, relation: d.tc_rel }] }); toast('Trusted contact added'); again(); } catch (x) { err.textContent = x.message; } });
+  });
+  // Privacy: each switch is saved at once and logged with its time.
+  const pv = sectionOf('data');
+  pv.addEventListener('change', async (e) => {
+    const k = e.target.dataset.consent; if (!k) return;
+    try { await save({ consents: { [k]: e.target.checked } }); toast(e.target.checked ? 'Consent given' : 'Consent withdrawn'); again(); } catch (x) { e.target.checked = !e.target.checked; toast(x.message, true); }
+  });
+  pv.addEventListener('click', async (e) => {
+    if (e.target.closest('#delAcc')) deleteAccount(again);
+    if (e.target.closest('#undoDel')) { await api('/hub/account/delete/cancel', { method: 'POST', body: {} }); toast('Deletion cancelled. Your account stays.'); again(); }
+  });
   // Deep links from the account panel: scroll to the section and highlight it.
   const tab = query.get('tab');
-  const target = tab && sectionOf({ details: 'details', business: 'business', addresses: 'addresses', payments: 'payments', notifications: 'notifications', security: 'security', format: 'format', app: 'app' }[tab] || tab);
+  const target = tab && sectionOf({ details: 'details', business: 'business', addresses: 'addresses', payments: 'payments', notifications: 'notifications', security: 'security', format: 'format', app: 'app', safety: 'safety', privacy: 'data', data: 'data' }[tab] || tab);
   if (target) { setTimeout(() => { target.scrollIntoView({ block: 'start', behavior: 'smooth' }); target.classList.add('pf-flash'); setTimeout(() => target.classList.remove('pf-flash'), 1600); }, 80); }
 }
 
@@ -238,4 +264,49 @@ async function downloadMyData(p) {
   const { apps, score, score_total, ...profile } = p;
   downloadJson(`ut-log-my-data-${new Date().toISOString().slice(0, 10)}.json`, { exported_at: new Date().toISOString(), profile, payment_methods: methods.instruments, orders: orders.data });
   toast('Your data is downloading');
+}
+
+// ---- safety and privacy cards ---------------------------------------------------------------
+function safetyBody(p) {
+  const list = p.trusted || [];
+  return `${list.length ? `<ul class="addr">${list.map((c, i) => `<li><span class="pf-av pf-av--sm" style="background:${colorOf(c.name)}">${esc(initialsOf(c.name))}</span><div class="grow"><b>${esc(c.name)}</b><small class="muted block">${esc(c.relation || 'Trusted contact')} · ${esc(c.phone)}</small></div><button class="btn btn-outline btn-sm" type="button" data-rm-tc="${i}">Remove</button></li>`).join('')}</ul>` : '<p class="notop muted">No trusted contacts yet. In an emergency, the Safety button on a live trip sends them your trip and location.</p>'}
+    ${list.length < 3 ? `<form class="form-grid mt-s" novalidate><label class="field">Name<input class="input" name="tc_name" autocomplete="off"></label><label class="field">Mobile<input class="input" name="tc_phone" inputmode="numeric" maxlength="10"></label><label class="field">Relation (optional)<input class="input" name="tc_rel" placeholder="Brother, colleague"></label><p class="form-error full"></p><div class="full"><button class="btn btn-primary" type="submit">Add trusted contact</button></div></form>` : ''}
+    <p class="muted small">On every live trip: Share live trip, and Safety with 112, your contacts and the UT safety team.</p>`;
+}
+const PURPOSES = [
+  ['location', 'Location for pickups', 'Find you on the map and fill in pickup addresses. Only while you book.'],
+  ['personalise', 'Personalised suggestions', 'Use your past bookings to suggest routes and partners.'],
+  ['analytics', 'Product analytics', 'Anonymous usage counts that help us fix what is slow or confusing.'],
+];
+function privacyBody(p) {
+  const c = { location: true, analytics: false, personalise: false, ...(p.consents || {}) };
+  const del = p.deletion;
+  return `${del ? `<div class="pv-del" role="alert"><b>Your account will be deleted on ${esc(new Date(del.purge_at).toLocaleDateString(undefined, { day: 'numeric', month: 'long', year: 'numeric' }))}.</b><span>Until then you can change your mind.</span><button class="btn btn-outline btn-sm" id="undoDel" type="button">Keep my account</button></div>` : ''}
+    <div class="pv-grid"><div>
+      <p class="pv-h">What you allow</p>
+      <ul class="pv-list">${PURPOSES.map(([k, t, d]) => `<li><div class="grow"><b>${t}</b><small>${d}</small></div><label class="switch"><input type="checkbox" data-consent="${k}" ${c[k] ? 'checked' : ''} aria-label="${t}"><i></i></label></li>`).join('')}
+        <li><div class="grow"><b>Needed to run your bookings</b><small>Name, mobile, addresses and payments are shared only with the partner doing the job.</small></div><span class="pv-req">Always on</span></li></ul>
+      ${(p.consent_log || []).length ? `<details class="pv-log"><summary>Consent history (${p.consent_log.length})</summary><ul>${p.consent_log.slice(0, 8).map((x) => `<li>${x.granted ? 'Gave' : 'Withdrew'} consent for ${esc((PURPOSES.find((q) => q[0] === x.purpose) || [, x.purpose])[1].toLowerCase())} · ${esc(new Date(x.at).toLocaleString())}</li>`).join('')}</ul></details>` : ''}
+    </div><div>
+      <p class="pv-h">Your rights</p>
+      <div class="pv-acts"><button class="btn btn-outline" id="dl2" type="button">${icon('download', 16)}Download my data</button><a class="btn btn-outline" href="#/activity">${icon('clock', 16)}Activity log</a><a class="btn btn-outline" href="#/support?new=1&topic=privacy">${icon('chat', 16)}Ask the privacy team</a></div>
+      <p class="muted small">We keep GST invoices for 8 years because the law requires it. Everything else is erased when you delete your account.</p>
+      <div class="pv-acts">${del ? '' : `<button class="btn btn-outline pv-danger" id="delAcc" type="button">Delete my account</button>`}<button class="btn btn-outline pf-out" id="lo" type="button">${icon('logout', 16)}Log out</button></div>
+    </div></div>`;
+}
+function deleteAccount(done) {
+  modal({
+    title: 'Delete your UT Log account?',
+    body: `<p class="notop">Your profile, saved places, payment methods and order history are erased after 7 days. You can cancel any time before then.</p>
+      <ul class="pv-bul"><li>Withdraw your wallet balance first. Anything left is refunded to your last payment method.</li><li>Open bookings must be finished or cancelled.</li><li>GST invoices are kept for 8 years, as the law requires.</li></ul>
+      <label class="field">Why are you leaving? (optional)<input class="input" id="delWhy"></label>
+      <label class="field">Type DELETE to confirm<input class="input" id="delOk" autocomplete="off" autocapitalize="characters"></label><p class="form-error" id="delErr"></p>`,
+    footer: '<button class="btn btn-outline" data-close>Keep my account</button><button class="btn btn-danger" id="delGo">Delete in 7 days</button>',
+    onMount(el, close) {
+      el.querySelector('#delGo').addEventListener('click', async () => {
+        try { await api('/hub/account/delete', { method: 'POST', body: { confirm: el.querySelector('#delOk').value, reason: el.querySelector('#delWhy').value } }); toast('Deletion scheduled. You can cancel it for 7 days.'); close(); done(); }
+        catch (x) { el.querySelector('#delErr').textContent = x.message; }
+      });
+    },
+  });
 }

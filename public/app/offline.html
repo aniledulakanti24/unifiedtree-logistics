@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>You're offline · UT Log</title>
+  <meta name="theme-color" content="#0F2925">
+  <style>
+    :root { color-scheme: light dark; }
+    body { margin: 0; min-height: 100vh; display: grid; place-items: center; padding: 24px; box-sizing: border-box; background: #f5f7f6; color: #12201c; font: 15px/1.55 Inter, system-ui, sans-serif; text-align: center; }
+    main { max-width: 360px; }
+    svg { width: 120px; height: auto; }
+    h1 { margin: 12px 0 6px; font-size: 21px; }
+    p { margin: 0 0 18px; color: #4b5d57; }
+    button { padding: 12px 22px; border: 0; border-radius: 10px; background: #0e7c66; color: #fff; font: 600 15px Inter, system-ui, sans-serif; cursor: pointer; }
+    @media (prefers-color-scheme: dark) { body { background: #0b1412; color: #e3eeea; } p { color: #9fb2ab; } }
+  </style>
+</head>
+<body>
+  <main>
+    <svg viewBox="0 0 120 110" aria-hidden="true" fill="none" stroke-linecap="round"><path d="M20 96h80" stroke="#c8d8d2" stroke-width="2"/><path d="M60 96V52" stroke="#2f4a3f" stroke-width="7"/><path d="M60 70 38 50M60 62l22-18M60 54V30" stroke="#3b5d4f" stroke-width="3.5"/><g fill="#57c39f"><ellipse cx="36" cy="46" rx="9" ry="6"/><ellipse cx="84" cy="40" rx="9" ry="6"/><ellipse cx="60" cy="26" rx="9" ry="6"/></g><path d="M60 96l-14 10M60 96l14 10" stroke="#b98c5f" stroke-width="2"/></svg>
+    <h1>You're offline</h1>
+    <p>UT Log needs a connection to load prices and bookings. Your bookings are safe. Try again when you have signal.</p>
+    <button type="button" onclick="location.reload()">Try again</button>
+  </main>
+</body>
+</html>

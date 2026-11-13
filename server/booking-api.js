@@ -365,7 +365,60 @@ module.exports = function register(routes, { send, authUser }, ctx) {
       ['IN_TRANSIT', air ? 'Departed origin airport' : 'In transit · origin hub', total * 0.2], ['IN_TRANSIT', b.service === 'international' ? 'Customs cleared at destination' : 'Reached destination hub', total * 0.75],
       ['OUT_FOR_DELIVERY', 'Out for delivery', total * 0.9], ['DELIVERED', 'Delivered', total]];
   }
+  // ---- dispatch to UT partner drivers ---------------------------------------------
+  // A partner booking waits for an online partner driver. If nobody accepts in time, the
+  // provider's own driver takes it and the usual timeline runs.
+  const DISPATCH_MS = 3 * 60000;
+  function dispatchView(b) {
+    const d = b.dispatch;
+    const ev = d.state === 'searching' ? [...d.events, { status: 'BOOKED', label: 'Finding a nearby UT partner driver', at: iso(Date.now()) }] : d.events;
+    const current = ev[ev.length - 1];
+    const picked = d.events.find((e) => e.status === 'PICKED_UP');
+    const tripMs = Math.max(5, b.option.trip_min || 20) * 60000;
+    const progress = current.status === 'DELIVERED' ? 1 : picked ? Math.min(0.95, (Date.now() - Date.parse(picked.at)) / tripMs) : 0;
+    const live = ['ASSIGNED', 'ARRIVING', 'PICKED_UP', 'IN_TRANSIT'].includes(current.status);
+    return {
+      id: b.id, status: current.status, label: current.label, service: b.service, segment: b.segment, created_at: iso(b.created_at),
+      route: b.route, option: { title: b.option.title, provider: b.option.provider, provider_type: b.option.provider_type, capacity: b.option.capacity },
+      driver: live && d.state === 'manual' ? b.driver : null,
+      otp: current.status !== 'DELIVERED' ? (['BOOKED', 'ASSIGNED', 'ARRIVING'].includes(current.status) ? { pickup: b.pickup_otp } : { delivery: b.delivery_otp }) : null,
+      progress: +progress.toFixed(3), remaining_min: current.status === 'DELIVERED' ? 0 : Math.round(((1 - progress) * tripMs) / 60000) + (picked ? 0 : (b.option.eta_pickup_min || 8)),
+      promised_by: b.option.eta, timeline: [...ev].reverse(), demo_speed: 1, total: b.option.total, from_pt: b.from_pt, to_pt: b.to_pt, dispatch: d.state,
+    };
+  }
+  // Bookings waiting for a partner driver.
+  function dispatchPool() {
+    const now = Date.now(); const out = [];
+    for (const b of bookings.values()) if (b.dispatch && b.dispatch.state === 'searching' && b.dispatch.until > now) out.push(b);
+    return out;
+  }
+  function assignDriver(id, driver) {
+    const b = bookings.get(id);
+    if (!b || !b.dispatch || b.dispatch.state !== 'searching' || b.dispatch.until < Date.now()) throw new Error('Another partner took this trip, or it is no longer available.');
+    b.dispatch.state = 'manual';
+    b.driver = driver;
+    const t = iso(Date.now());
+    b.dispatch.events.push({ status: 'ASSIGNED', label: `Driver assigned · ${driver.name}`, at: t }, { status: 'ARRIVING', label: 'Driver on the way to pickup', at: t });
+    return b;
+  }
+  // The partner app moves a trip forward; OTPs come from the customer.
+  function stepTrip(id, action, otp) {
+    const b = bookings.get(id);
+    if (!b || !b.dispatch || b.dispatch.state !== 'manual') throw new Error('This trip is no longer assigned to you.');
+    const t = iso(Date.now()); const ev = b.dispatch.events;
+    if (action === 'arrived') ev.push({ status: 'ARRIVING', label: 'Driver has reached the pickup', at: t });
+    else if (action === 'pickup') { if (String(otp) !== b.pickup_otp) throw new Error('That pickup OTP is not right. Ask the sender for the 4-digit code.'); ev.push({ status: 'PICKED_UP', label: 'Picked up', at: t }, { status: 'IN_TRANSIT', label: 'On the way to drop', at: t }); }
+    else if (action === 'deliver') { if (String(otp) !== b.delivery_otp) throw new Error('That delivery OTP is not right. Ask the receiver for the 4-digit code.'); ev.push({ status: 'DELIVERED', label: 'Delivered', at: t }); }
+    else if (action === 'release') { b.dispatch = { state: 'searching', until: Date.now() + DISPATCH_MS, events: [ev[0]] }; return b; }
+    else throw new Error('Unknown step.');
+    return b;
+  }
   function trackingView(b) {
+    if (b.dispatch) {
+      // Nobody accepted in time: the provider's own driver takes the trip from now.
+      if (b.dispatch.state === 'searching' && b.dispatch.until < Date.now()) { b.dispatch = null; b.created_at = Date.now(); }
+      else return dispatchView(b);
+    }
     const elapsedMin = ((Date.now() - b.created_at) / 60000) * speedOf(b);
     const startOffset = Math.max(0, (b.pickup_at - b.created_at) / 60000);
     const stages = stagesFor(b);
@@ -422,6 +475,7 @@ module.exports = function register(routes, { send, authUser }, ctx) {
       driver: { name: drv, phone: '+91 9' + String(crypto.randomInt(1e8, 1e9 - 1)).slice(0, 4) + ' ••••••', vehicle_no: `${STATE_CODE[i.cityKey] || 'KA'} ${String(crypto.randomInt(1, 60)).padStart(2, '0')} ${String.fromCharCode(65 + crypto.randomInt(0, 26))}${String.fromCharCode(65 + crypto.randomInt(0, 26))} ••${crypto.randomInt(10, 99)}`, rating: (4.3 + crypto.randomInt(0, 7) / 10).toFixed(1) },
       pickup_otp: String(crypto.randomInt(1000, 9999)), delivery_otp: String(crypto.randomInt(1000, 9999)),
     };
+    if (onDemand(b) && option.kind === 'independent') b.dispatch = { state: 'searching', until: Date.now() + DISPATCH_MS, events: [{ status: 'BOOKED', label: 'Booking confirmed', at: iso(b.created_at) }] };
     bookings.set(id, b);
     if (option.partner_id) { const p = partners.find((x) => x.id === option.partner_id); if (p) p.jobs++; }
     return { id, total: option.total };
@@ -475,5 +529,5 @@ module.exports = function register(routes, { send, authUser }, ctx) {
     }
     return { km: +pin.km.toFixed(1), area: null, city: null, cityKey: null, pincode: pin.pincode };
   }
-  return { parseInput, buildOptions, resolveRoute, resolvePlace, createBooking, trackById, areaPoint, haversine, pinPoint, nearest, cities: CITIES };
+  return { dispatchPool, assignDriver, stepTrip, VEHICLES, parseInput, buildOptions, resolveRoute, resolvePlace, createBooking, trackById, areaPoint, haversine, pinPoint, nearest, cities: CITIES };
 };

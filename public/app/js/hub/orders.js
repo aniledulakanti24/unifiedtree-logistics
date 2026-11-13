@@ -7,9 +7,9 @@ import { openTracking, openClaim, openRate, printReceipt, printTicket, reschedul
 import { rebook } from './transport.js';
 import { PAY_LABEL } from './checkout.js';
 import { tableTools, wireTableTools } from './tabletools.js';
+import { dateRangeField, mountDateRange, fromQuery, toQuery, toApi } from './daterange.js';
 
 const TABS = [['new', 'New'], ['assigned', 'Pickups'], ['transit', 'In Transit'], ['delivered', 'Delivered'], ['cancelled', 'Cancelled'], ['all', 'All']];
-const RANGES = [['1', 'Today'], ['7', 'Last 7 days'], ['30', 'Last 30 days'], ['90', 'Last 90 days'], ['', 'All time']];
 const SERVICES = [['vehicle', 'Vehicle', 'Bike, auto or van in your city', 'bike', 'green'], ['courier', 'Courier', 'Parcels by pincode', 'parcel', 'amber'], ['logistics', 'Logistics', 'Full trucks and contractors', 'truck', 'blue'], ['international', 'International', 'Ship to another country', 'globe', 'violet']];
 
 export function addOrder() {
@@ -55,22 +55,22 @@ export function wireOrders(view, r, again) {
 
 export async function renderOrders(view, { query }) {
   const group = query.get('group') || 'all';
-  const days = query.get('days') == null ? '30' : query.get('days');
+  const range = fromQuery(query, 'last30');
   const search = query.get('search') || '';
   const scope = query.get('scope') || 'all';
   const section = query.get('section') || '';
   const pay = query.get('pay') || '';
   const page = Number(query.get('page')) || 1;
-  const link = (patch) => { const q = new URLSearchParams({ group, days, search, scope, section, pay, ...patch }); [...q.keys()].forEach((k) => { if (!q.get(k) && k !== 'days') q.delete(k); }); return `#/my/orders?${q}`; };
+  const link = (patch) => { const q = new URLSearchParams({ group, search, scope, section, pay, ...toQuery(range), ...patch }); [...q.keys()].forEach((k) => { if (!q.get(k)) q.delete(k); }); return `#/my/orders?${q}`; };
   view.innerHTML = '<div class="skeleton" style="height:300px"></div>';
-  const r = await api('/hub/orders', { query: { scope: scope === 'all' ? '' : scope, section, group, days, search, pay, page, per_page: 15 } });
-  const fields = [{ key: 'days', label: 'Date', def: '30', options: RANGES }, ...(scope !== 'intl' ? [{ key: 'section', label: 'Service', options: [['', 'All services'], ...(scope === 'all' ? Object.entries(SECTION_LABEL) : ['vehicle', 'courier', 'logistics'].map((k) => [k, SECTION_LABEL[k]]))] }] : []), { key: 'pay', label: 'Payment', options: [['', 'All payments'], ['prepaid', 'Prepaid'], ['cod', 'Pay on delivery']] }];
+  const r = await api('/hub/orders', { query: { scope: scope === 'all' ? '' : scope, section, group, ...toApi(range), search, pay, page, per_page: 15 } });
+  const fields = [...(scope !== 'intl' ? [{ key: 'section', label: 'Service', options: [['', 'All services'], ...(scope === 'all' ? Object.entries(SECTION_LABEL) : ['vehicle', 'courier', 'logistics'].map((k) => [k, SECTION_LABEL[k]]))] }] : []), { key: 'pay', label: 'Payment', options: [['', 'All payments'], ['prepaid', 'Prepaid'], ['cod', 'Pay on delivery']] }];
   view.innerHTML = `
     <div class="page-head orders-head"><div class="row"><h1>All Orders</h1><select class="select scope" id="scope" aria-label="Domestic or international"><option value="domestic" ${scope === 'domestic' ? 'selected' : ''}>Domestic</option><option value="intl" ${scope === 'intl' ? 'selected' : ''}>International</option><option value="all" ${scope === 'all' ? 'selected' : ''}>All services</option></select></div>
       <form id="sf" class="orders-search"><input class="input" type="search" name="search" value="${esc(search)}" placeholder="Search by order ID, provider or route" aria-label="Search orders"></form>
       <button class="btn btn-primary" id="add" type="button">+ Add Order</button></div>
     <nav class="tabs tabs--line">${TABS.map(([k, l]) => `<a href="${link({ group: k, page: 1 })}" class="${k === group ? 'active' : ''}">${l}<span class="count">${r.counts[k] || 0}</span></a>`).join('')}</nav>
-    <div class="toolbar">${filterBtn(countActive(fields, { days, section, pay }))}<span class="spacer"></span>${tableTools()}<button class="btn btn-outline" id="csv" type="button">Export</button></div>
+    <div class="toolbar">${filterBtn(countActive(fields, { section, pay }))}${dateRangeField(range)}<span class="spacer"></span>${tableTools()}<button class="btn btn-outline" id="csv" type="button">Export</button></div>
     ${ORDER_BULK}
     <p class="muted small">${r.meta.pagination.total} orders</p>
     ${r.data.length ? orderTable(r) : `<div class="card">${vehicleEmpty(search || group !== 'all' ? 'No orders match these filters.' : 'Create your first order to see it here.')}</div>`}`;
@@ -79,7 +79,8 @@ export async function renderOrders(view, { query }) {
   const again = () => renderOrders(view, { query });
   view.querySelector('#add').addEventListener('click', addOrder);
   view.querySelector('#scope').addEventListener('change', (e) => { location.hash = link({ scope: e.target.value, section: '', page: 1 }); });
-  view.querySelector('#flt').addEventListener('click', (e) => openFilters(e.currentTarget, fields, { days, section, pay }, (v) => { location.hash = link({ ...v, page: 1 }); }));
+  view.querySelector('#flt').addEventListener('click', (e) => openFilters(e.currentTarget, fields, { section, pay }, (v) => { location.hash = link({ ...v, page: 1 }); }));
+  mountDateRange(view, range, (v) => { location.hash = link({ ...toQuery(v), page: 1 }); });
   view.querySelector('#sf').addEventListener('submit', (e) => { e.preventDefault(); location.hash = link({ search: e.target.search.value, page: 1 }); });
   view.querySelector('#csv').addEventListener('click', () => downloadCsv('ut-log-orders.csv', csvRows(r.data)));
   wireOrders(view, r, again);

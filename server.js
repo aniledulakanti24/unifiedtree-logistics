@@ -243,6 +243,8 @@ require('./server/logistics-api')(routes, { send, authUser }, sellerCtx);
 require('./server/account-api')(routes, { send, sessions, users, setApiKeyResolver: (fn) => { apiKeyResolver = fn; } }, sellerCtx);
 require('./server/ops-api')(routes, { send, users }, sellerCtx);
 const bookingCtx = require('./server/booking-api')(routes, { send, authUser }, sellerCtx);
+// Partner (driver) app: sign-up, trips and payouts. Tracked data is restored by store.load() below.
+require('./server/partner-api')(routes, { send, authUser }, bookingCtx);
 const hubCtx = require('./server/hub-api')(routes, { send }, sellerCtx, bookingCtx);
 const bizCtx = require('./server/business-api')(routes, { send }, sellerCtx, bookingCtx, hubCtx);
 require('./server/orders-api')(routes, { send, users }, sellerCtx, bookingCtx, hubCtx, bizCtx);

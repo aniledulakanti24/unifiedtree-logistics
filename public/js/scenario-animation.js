@@ -25,7 +25,7 @@
 
   function getBestVehicle(kg) {
     if (kg <= 5) return { key: 'bike', name: 'Bike / 2-Wheeler', price: '₹85', save: 'Lowest local fare', tag: 'RECOMMENDED BEST FIT' };
-    if (kg <= 450) return { key: 'mini', name: 'Tata Ace (Mini Truck)', price: '₹310', save: 'Save ₹180 vs standalone app', tag: 'RECOMMENDED BEST FIT' };
+    if (kg <= 450) return { key: 'mini', name: 'Tata Ace (Mini Truck)', price: '₹310', save: '₹180 below the average quote', tag: 'RECOMMENDED BEST FIT' };
     if (kg <= 1200) return { key: 'pickup8', name: 'Pickup 8ft Truck', price: '₹620', save: 'Optimal for medium freight', tag: 'RECOMMENDED BEST FIT' };
     return { key: 'truck14', name: '14ft Heavy Truck', price: '₹1,250', save: 'Commercial bulk carrier', tag: 'RECOMMENDED BEST FIT' };
   }

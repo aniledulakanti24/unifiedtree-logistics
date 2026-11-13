@@ -1,59 +1,68 @@
 // App shell: auth gate, sidebar, hash router, top bar, command palette, preferences.
 import { api, getToken, store, money, esc, refreshCounts } from './core.js';
-import * as sellerHome from './pages/home.js';
-import * as orders from './pages/orders.js';
-import * as orderDetail from './pages/order-detail.js';
-import * as addOrder from './pages/add-order.js';
-import * as ndr from './pages/ndr.js';
-import * as returns from './pages/returns.js';
-import * as weight from './pages/weight.js';
-import * as analytics from './pages/analytics.js';
-import * as billing from './pages/billing.js';
-import * as tools from './pages/tools.js';
-import * as reports from './pages/reports.js';
-import * as settings from './pages/settings.js';
-import * as shipments from './pages/shipments.js';
-import * as manifests from './pages/manifests.js';
-import * as bulk from './pages/bulk.js';
-import * as exchanges from './pages/exchanges.js';
-import * as international from './pages/international.js';
-import * as risk from './pages/risk.js';
-import * as promise from './pages/promise.js';
-import * as rules from './pages/rules.js';
-import * as commerce from './pages/commerce.js';
-import * as account from './pages/account.js';
+// Pages load when first opened, not at start-up. lazy() stands in for a module namespace:
+// calling X.render(...) imports the file once, then calls the real function.
+const loaded = new Map();
+function lazy(loader) {
+  const load = () => { if (!loaded.has(loader)) loaded.set(loader, loader().catch((e) => { loaded.delete(loader); throw new Error('This page could not load. Check your connection and try again.'); })); return loaded.get(loader); };
+  return new Proxy({}, { get: (_, key) => (key === 'load' ? load : (...args) => load().then((m) => m[key](...args))) });
+}
+const sellerHome = lazy(() => import('./pages/home.js'));
+const orders = lazy(() => import('./pages/orders.js'));
+const orderDetail = lazy(() => import('./pages/order-detail.js'));
+const addOrder = lazy(() => import('./pages/add-order.js'));
+const ndr = lazy(() => import('./pages/ndr.js'));
+const returns = lazy(() => import('./pages/returns.js'));
+const weight = lazy(() => import('./pages/weight.js'));
+const analytics = lazy(() => import('./pages/analytics.js'));
+const billing = lazy(() => import('./pages/billing.js'));
+const tools = lazy(() => import('./pages/tools.js'));
+const reports = lazy(() => import('./pages/reports.js'));
+const settings = lazy(() => import('./pages/settings.js'));
+const shipments = lazy(() => import('./pages/shipments.js'));
+const manifests = lazy(() => import('./pages/manifests.js'));
+const bulk = lazy(() => import('./pages/bulk.js'));
+const exchanges = lazy(() => import('./pages/exchanges.js'));
+const international = lazy(() => import('./pages/international.js'));
+const risk = lazy(() => import('./pages/risk.js'));
+const promise = lazy(() => import('./pages/promise.js'));
+const rules = lazy(() => import('./pages/rules.js'));
+const commerce = lazy(() => import('./pages/commerce.js'));
+const account = lazy(() => import('./pages/account.js'));
 import * as help from './pages/help.js';
-import * as developers from './pages/developers.js';
-import * as support from './pages/support.js';
-import * as finance from './pages/finance.js';
-import * as dashboard from './hub/dashboard.js';
-import * as transport from './hub/transport.js';
-import * as wallet from './hub/wallet.js';
-import * as travel from './hub/travel.js';
-import * as pay from './hub/pay.js';
+const developers = lazy(() => import('./pages/developers.js'));
+const support = lazy(() => import('./pages/support.js'));
+const finance = lazy(() => import('./pages/finance.js'));
+const dashboard = lazy(() => import('./hub/dashboard.js'));
+const transport = lazy(() => import('./hub/transport.js'));
+const wallet = lazy(() => import('./hub/wallet.js'));
+const travel = lazy(() => import('./hub/travel.js'));
+const pay = lazy(() => import('./hub/pay.js'));
 import * as profile from './hub/profile.js';
-import * as insights from './hub/insights.js';
-import * as business from './hub/business.js';
-import * as hubOrders from './hub/orders.js';
-import * as hubWeight from './hub/weight.js';
-import * as hubHelp from './hub/help.js';
-import * as accessPage from './hub/access.js';
-import * as holidayPage from './hub/holidays.js';
-import * as intel from './hub/intel.js';
-import * as control from './hub/control.js';
+const insights = lazy(() => import('./hub/insights.js'));
+const business = lazy(() => import('./hub/business.js'));
+const hubOrders = lazy(() => import('./hub/orders.js'));
+const hubWeight = lazy(() => import('./hub/weight.js'));
+const hubHelp = lazy(() => import('./hub/help.js'));
+const accessPage = lazy(() => import('./hub/access.js'));
+const holidayPage = lazy(() => import('./hub/holidays.js'));
+const intel = lazy(() => import('./hub/intel.js'));
+const control = lazy(() => import('./hub/control.js'));
 import { setupApp, maybeTour } from './hub/experience.js';
 import { installSmoothScroll, watchView, resetScroll, progressStart, progressDone } from './hub/motion.js';
 import { duo, scene } from './hub/art.js';
 import { addMoney } from './hub/ui.js';
-import { bootLanguage, askAccountType, setAccountType, setTheme, getTheme } from './hub/prefs.js';
+import * as ws from './hub/workspace.js';
+import { maybeOffer, install, canInstall } from './hub/install.js';
+import { bootLanguage, askAccountType, askBusinessDetails, setAccountType, setTheme, getTheme } from './hub/prefs.js';
 import { installPalette, openPalette } from './palette.js';
 
 if (!getToken()) location.replace('/login/?next=' + encodeURIComponent('/app/' + location.hash));
 bootLanguage();
 
 // Route table: first match wins; :params are passed to the page renderer.
-import * as desk_ from './hub/desk.js';
-import * as bills from './hub/bills.js';
+const desk_ = lazy(() => import('./hub/desk.js'));
+const bills = lazy(() => import('./hub/bills.js'));
 import { icon } from './hub/icons.js';
 import { openAsk } from './hub/ask.js';
 import { popover } from './hub/prefs.js';
@@ -65,6 +74,7 @@ const section = (key) => [
 ];
 const ROUTES = [
   ['home', dashboard.render],
+  ['workspace', ws.render],
   ...['vehicle', 'courier', 'logistics', 'international'].flatMap(section),
   ['courier/bulk', (v, p) => transport.render(v, { ...p, section: 'courier', tab: 'bulk' })],
   ['bookings', (v, { query }) => { location.replace(`#/my/orders?scope=all&days=${query.get('days') || ''}${query.get('search') ? `&search=${encodeURIComponent(query.get('search'))}` : ''}`); }],
@@ -116,6 +126,8 @@ async function route() {
   closeMobileSide();
   const needs = moduleFor(path || 'home');
   if (needs && !can(needs)) { if (typeof cleanup === 'function') cleanup(); cleanup = null; view.innerHTML = `<div class="card"><div class="empty-scene">${scene('locked').value}<p>Your role does not include this page. Ask your account admin for access.</p></div></div>`; return; }
+  const off = ws.blockedBy(path || 'home');
+  if (off) { document.querySelectorAll('.pop').forEach((p) => p.remove()); ws.offScreen(view, off); document.title = 'Workspace · UT Log'; return; }
   document.querySelectorAll('.pop').forEach((p) => p.remove());
   view.innerHTML = '';
   view.onclick = null;
@@ -189,12 +201,14 @@ function renderNav() {
   const { menu } = store.state;
   // A section with tabs stays in the sidebar if the role can open any one of them.
   const resolved = NAV.map((n) => { const hit = n.alts && n.alts.find(([m]) => can(m)); return hit ? { ...n, mod: hit[0], path: hit[1] } : n; });
-  const visible = resolved.filter((n) => (!n.business || isBusiness()) && (!n.owner || isOwner()) && (!n.mod || can(n.mod)));
+  const visible = resolved.filter((n) => (!n.business || isBusiness()) && (!n.owner || isOwner()) && (!n.mod || can(n.mod)) && (n.group || ws.navOn(n.key)));
   // Drop group headings with nothing under them.
   const items = visible.filter((n, i) => !n.group || (visible[i + 1] && !visible[i + 1].group));
   const favs = readFavs().map((k) => visible.find((n) => n.key === k)).filter(Boolean);
   let out = (favs.length ? `<p class="nav__group">Favourites</p>${favs.map((n) => navLink(n, true)).join('')}` : '') + items.map((n) => (n.group ? `<p class="nav__group">${esc(n.group)}</p>` : navLink(n))).join('');
-  if (isBusiness() && can('seller_ship') && (menu || []).some((m) => m.children && !m.account)) out += navLink({ key: 'seller', label: 'Seller Tools', icon: 'tools', path: '#/seller-home' }).replace('data-path=', 'data-seller="1" data-path=');
+  if (isBusiness() && ws.navOn('seller') && can('seller_ship') && (menu || []).some((m) => m.children && !m.account)) out += navLink({ key: 'seller', label: 'Seller Tools', icon: 'tools', path: '#/seller-home' }).replace('data-path=', 'data-seller="1" data-path=');
+  const more = ws.hiddenCount();
+  if (more && isOwner()) out += `<a class="nav__item nav__more" href="#/workspace" data-path="#/workspace" title="Add services">${icon('plus', 17)}<span>Add services</span><i class="nav-count nav-count--soft">${more}</i></a>`;
   sideNav.innerHTML = out;
   document.getElementById('walletPill').hidden = !can('wallet');
   highlightNav(currentPath());
@@ -233,7 +247,8 @@ function renderUser({ user, counts, profile: p }) {
   if (counts && counts.wallet_balance != null) document.getElementById('walletBalance').textContent = money(counts.wallet_balance);
 }
 let navSig = '';
-store.subscribe((s) => { const sig = JSON.stringify([s.accountType, s.user && s.user.permissions, (s.menu || []).length]); if (sig !== navSig) { navSig = sig; renderNav(); } renderUser(s); });
+const ALL_PAGES = store.state.hubPages;
+store.subscribe((s) => { const w = s.profile && s.profile.workspace; store.state.hubPages = ALL_PAGES.filter((p) => ws.pathOn(p.path)); const sig = JSON.stringify([s.accountType, s.user && s.user.permissions, (s.menu || []).length, w && w.on]); if (sig !== navSig) { navSig = sig; renderNav(); } renderUser(s); });
 renderNav();
 renderUser(store.state);
 
@@ -262,18 +277,20 @@ sideNav.addEventListener('click', (e) => {
 document.getElementById('askBtn').addEventListener('click', openAsk);
 const NEW_ITEMS = [['Ship', [['bike', 'Vehicle booking', '#/vehicle/book', 'booking'], ['parcel', 'Courier shipment', '#/courier/book', 'booking'], ['truck', 'Truck load', '#/logistics/book', 'booking'], ['globe', 'International shipment', '#/international/book', 'booking'], ['building', 'Movers or warehousing', '#/services/movers', 'booking']]], ['Book', [['plane', 'Flight', '#/travel/flights', 'travel'], ['building', 'Hotel or stay', '#/travel/hotels', 'travel'], ['map', 'Local ride', '#/rides', 'travel']]], ['Pay', [['phone', 'Mobile recharge', '#/pay/mobile', 'recharge'], ['receipt', 'Pay a bill', '#/pay/bills', 'recharge'], ['rupee', 'Send money', '#/pay/send', 'recharge'], ['returnbox', 'Return for an order', '#/my/returns', 'returns']]]];
 document.getElementById('newBtn').addEventListener('click', (e) => {
-  const groups = NEW_ITEMS.map(([g, list]) => [g, list.filter((x) => can(x[3]))]).filter(([, l]) => l.length);
+  const groups = NEW_ITEMS.map(([g, list]) => [g, list.filter((x) => can(x[3]) && ws.pathOn(x[2]))]).filter(([, l]) => l.length);
   popover(e.currentTarget, `<div class="menu-list">${groups.map(([g, l]) => `<p class="menu-head">${g}</p>${l.map(([i, t, h]) => `<a href="${h}">${icon(i, 16)}${esc(t)}</a>`).join('')}`).join('')}${can('wallet') ? `<div class="menu-sep"></div><button type="button" data-add-money>${icon('wallet', 16)}Add money to wallet</button>` : ''}</div>`, (el, close) => {
     el.addEventListener('click', (x) => { if (x.target.closest('a')) close(); if (x.target.closest('[data-add-money]')) { close(); addMoney().then((ok) => { if (ok) route(); }); } });
   });
 });
 document.getElementById('helpBtn').addEventListener('click', (e) => {
-  popover(e.currentTarget, `<div class="menu-list"><a href="#/help">${icon('help', 16)}Help centre</a><a href="#/support?new=1">${icon('chat', 16)}Contact support</a><a href="#/shortcuts">${icon('keyboard', 16)}Keyboard shortcuts<small>?</small></a><button type="button" data-tour>${icon('rocket', 16)}Take the tour</button><div class="menu-sep"></div><a href="#/feedback">${icon('star', 16)}Send feedback</a></div>`, (el, close) => {
-    el.addEventListener('click', (x) => { if (x.target.closest('a')) close(); if (x.target.closest('[data-tour]')) { close(); location.hash = '#/home'; setTimeout(startTour, 900); } });
+  popover(e.currentTarget, `<div class="menu-list"><a href="#/help">${icon('help', 16)}Help centre</a><a href="#/support?new=1">${icon('chat', 16)}Contact support</a>${canInstall() ? `<button type="button" data-install>${icon('phone', 16)}Install the app</button>` : ''}<a href="#/shortcuts">${icon('keyboard', 16)}Keyboard shortcuts<small>?</small></a><button type="button" data-tour>${icon('rocket', 16)}Take the tour</button><div class="menu-sep"></div><a href="#/feedback">${icon('star', 16)}Send feedback</a></div>`, (el, close) => {
+    el.addEventListener('click', (x) => { if (x.target.closest('a')) close(); if (x.target.closest('[data-install]')) { close(); install(); } if (x.target.closest('[data-tour]')) { close(); location.hash = '#/home'; setTimeout(startTour, 900); } });
   });
 });
 document.getElementById('profileBtn').addEventListener('click', profile.openDrawer);
 document.getElementById('sideMe').addEventListener('click', profile.openDrawer);
+// "Add a gift card" links anywhere open Add money on the Gift card tab.
+document.addEventListener('click', (e) => { if (e.target.closest('[data-gc]')) addMoney(1000, null, 'giftcard'); });
 document.getElementById('walletAdd').addEventListener('click', () => addMoney().then((ok) => { if (ok) route(); }));
 document.getElementById('bellBtn').addEventListener('click', (e) => profile.openNotifications(e.currentTarget));
 window.addEventListener('ut:account', () => route());
@@ -312,6 +329,20 @@ help.installShortcuts();
 window.addEventListener('hashchange', route);
 
 // Boot: load user, menu and profile (cached copies already painted), then route.
+// Fade the start-up tree away once the first page is on screen.
+// After start-up, quietly fetch the pages this workspace uses most, unless the user saves data.
+function prefetch() {
+  const c = navigator.connection;
+  if (c && (c.saveData || /2g/.test(c.effectiveType || ''))) return;
+  const by = { vehicle: [transport, desk_], courier: [transport, desk_], logistics: [transport, desk_], international: [transport, desk_], travel: [travel], pay: [pay, bills], returns: [hubOrders] };
+  const list = [dashboard, hubOrders, wallet, ...new Set(((store.state.profile && store.state.profile.workspace && store.state.profile.workspace.on) || []).flatMap((k) => by[k] || []))];
+  // Idle time when there is some; never more than 2 s late on a busy phone.
+  const idle = (fn) => (window.requestIdleCallback ? requestIdleCallback(fn, { timeout: 2000 }) : setTimeout(fn, 200));
+  const go = () => { const next = list.shift(); if (next) next.load().catch(() => {}).finally(() => idle(go)); };
+  setTimeout(() => idle(go), 1500);
+}
+const bootDone = () => { const b = document.getElementById('boot'); if (!b || b.classList.contains('done')) return; b.classList.add('done'); setTimeout(() => b.remove(), 450); };
+setTimeout(bootDone, 8000);
 const fixMenu = (data) => { data.forEach((m) => (m.children || []).forEach((c) => { if (c.path === '#/home') c.path = '#/seller-home'; })); return data; };
 (async () => {
   try {
@@ -322,11 +353,16 @@ const fixMenu = (data) => { data.forEach((m) => (m.children || []).forEach((c) =
     pollNotes();
     loadCounts();
     await route();
+    bootDone();
+    prefetch();
+    maybeOffer();
     if (!p.account_type && user.role === 'owner') {
       const type = await askAccountType();
       await setAccountType(type || 'personal');
+      if (type === 'business') await askBusinessDetails();
+      await ws.askFocus();
       await route();
     }
     if (user.role === 'owner') maybeTour();
-  } catch (err) { if (err.message !== 'Session expired') route(); }
+  } catch (err) { bootDone(); if (err.message !== 'Session expired') route(); }
 })();

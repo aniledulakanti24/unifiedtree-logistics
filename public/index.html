@@ -14,6 +14,7 @@
   <link rel="stylesheet" href="css/scenario.css?v=35">
   <link rel="stylesheet" href="css/hero-animation.css?v=35">
   <link rel="stylesheet" href="css/cinematic-footer.css?v=35">
+  <link rel="stylesheet" href="css/ut-tree.css?v=4">
   <!-- GSAP 3.12.5 & ScrollTrigger Core -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/ScrollTrigger.min.js"></script>
@@ -48,7 +49,7 @@
           </div>
         </li>
         <li><a class="menu-link" href="/pricing/" target="_blank" rel="noopener">Pricing</a></li>
-        <li><a class="menu-link" href="/partners/" target="_blank" rel="noopener">Drive with us</a></li>
+        <li><a class="menu-link" href="/driver/">Drive with us</a></li>
       </ul>
     </nav>
     <div class="appLogins">
@@ -71,31 +72,31 @@
           <span class="heroFleetTag__pulse"></span>
           <span class="heroFleetTag__text">Multi-Fleet Logistics Platform</span>
           <span class="heroFleetTag__sep">✦</span>
-          <span class="heroFleetTag__sub">Bengaluru &amp; 24,000+ Pin Codes</span>
+          <span class="heroFleetTag__sub">6 cities · couriers India-wide</span>
         </div>
 
         <h1 class="heroMainHeading">
-          India's Leading Multi-Fleet Logistics Engine.
+          One app for every delivery fleet.
           <span class="heroGradientText">Compare Porter, Rapido &amp; Couriers in One Tap.</span>
         </h1>
 
         <p class="heroLeadText">
-          Stop jumping between 4 different delivery apps or paying unpredictable surge fares. UT Logistics unifies independent tempos, 2-wheelers, and national express couriers — matching your package weight to the guaranteed lowest rate and nearest verified vehicle in seconds.
+          Stop jumping between 4 different delivery apps or paying unpredictable surge fares. UT Logistics unifies independent tempos, 2-wheelers, and national express couriers — matching your package weight to the right vehicle and showing every price side by side, so you pick.
         </p>
 
         <!-- Micro-Proof Value Matrix -->
         <div class="heroProofRow">
           <div class="heroProofItem">
             <span class="heroProofIcon">⚡</span>
-            <div><b>4-Min Match</b><small>Live Fleet Radar</small></div>
+            <div><b>Prices in seconds</b><small>Every partner quote, side by side</small></div>
           </div>
           <div class="heroProofItem">
             <span class="heroProofIcon">🛡️</span>
-            <div><b>Verified Drivers</b><small>100% Background Check</small></div>
+            <div><b>Verified partners</b><small>Licence, RC and selfie checked</small></div>
           </div>
           <div class="heroProofItem">
             <span class="heroProofIcon">💰</span>
-            <div><b>Zero Surge</b><small>Guaranteed Base Rates</small></div>
+            <div><b>Upfront fares</b><small>Locked when you book</small></div>
           </div>
           <div class="heroProofItem">
             <span class="heroProofIcon">📦</span>
@@ -133,6 +134,7 @@
         </div>
 
         <!-- Clean Multi-Fleet Comparison Matrix -->
+        <p class="htIllus">Illustration with example fares. Run a search below for live partner quotes.</p>
         <div class="htMatrixTable" id="htMatrixTable">
           <div class="htScanlineBeam" id="htScanlineBeam"></div>
           <!-- Row 1: Porter -->
@@ -142,8 +144,8 @@
               <span>Porter App</span>
             </div>
             <div class="htMatrixStatus">
-              <span class="htStatusBadge htStatusBadge--surge" id="htPorterBadge">1.8x Surge ⚠️</span>
-              <span id="htPorterSub">Heavy surge detected · 35m wait</span>
+              <span class="htStatusBadge htStatusBadge--surge" id="htPorterBadge">Higher quote</span>
+              <span id="htPorterSub">Example fare · 35 min pickup</span>
             </div>
             <div class="htMatrixFare" id="htPorterFare">₹480</div>
           </div>
@@ -155,8 +157,8 @@
               <span>Rapido Bike</span>
             </div>
             <div class="htMatrixStatus">
-              <span class="htStatusBadge htStatusBadge--reject" id="htRapidoBadge">Rejected ✕</span>
-              <span id="htRapidoSub">Exceeds 5kg bike limit (18kg parcel)</span>
+              <span class="htStatusBadge htStatusBadge--reject" id="htRapidoBadge">Too heavy ✕</span>
+              <span id="htRapidoSub">18 kg is over a bike's load limit</span>
             </div>
             <div class="htMatrixFare" id="htRapidoFare">--</div>
           </div>
@@ -169,7 +171,7 @@
             </div>
             <div class="htMatrixStatus">
               <span class="htStatusBadge htStatusBadge--delay" id="htCourierBadge">2-3 Days ⏳</span>
-              <span id="htCourierSub">No same-day or live GPS tracking</span>
+              <span id="htCourierSub">Next-day or later delivery</span>
             </div>
             <div class="htMatrixFare" id="htCourierFare">₹240</div>
           </div>
@@ -182,7 +184,7 @@
             </div>
             <div class="htMatrixStatus">
               <span class="htStatusBadge htStatusBadge--best" id="htUtBadge">BEST MATCH ★</span>
-              <span id="htUtSub">Tata Ace · Saves ₹170 vs Porter surge</span>
+              <span id="htUtSub">Tata Ace · ₹170 below the average quote</span>
             </div>
             <div class="htMatrixFare htMatrixFare--winner" id="htUtFare">₹310</div>
           </div>
@@ -274,22 +276,23 @@
   <div class="container">
     <div class="trustStatsGrid">
       <div class="trustStatCard">
-        <span class="trustStatNum">24,000+</span>
-        <span class="trustStatLabel">Pin Codes Served Across India</span>
+        <span class="trustStatNum" data-stat="cities">6</span>
+        <span class="trustStatLabel">Cities with same-day vehicles</span>
       </div>
       <div class="trustStatCard">
-        <span class="trustStatNum">25+</span>
-        <span class="trustStatLabel">Courier &amp; Fleet Partners Integrated</span>
+        <span class="trustStatNum" data-stat="areas">50+</span>
+        <span class="trustStatLabel">Localities with live pickup</span>
       </div>
       <div class="trustStatCard">
-        <span class="trustStatNum">₹20/kg</span>
-        <span class="trustStatLabel">Lowest Guaranteed Starting Rates</span>
+        <span class="trustStatNum" data-stat="partners">10+</span>
+        <span class="trustStatLabel">Fleet and courier partners compared</span>
       </div>
       <div class="trustStatCard">
-        <span class="trustStatNum">99.4%</span>
-        <span class="trustStatLabel">On-Time Driver Dispatch &amp; GPS</span>
+        <span class="trustStatNum" data-stat="vehicles">8</span>
+        <span class="trustStatLabel">Vehicle sizes, bike to trailer</span>
       </div>
     </div>
+    <p class="trustNote">Counted live from the UT Log network. Prices are each partner's own quote at the time you search; "below average" compares one quote with the others shown for the same trip. <a href="/pricing/#how">How pricing works</a></p>
     <div class="partnerTickerWrap">
       <p class="partnerTickerLead">Compare real-time rates across India's top delivery fleets:</p>
       <div class="partnerTickerBadges">
@@ -307,6 +310,24 @@
 </section>
 
 <!-- ============ WHY UT LOGISTICS (THE SCENARIO COMPARISON) ============ -->
+<!-- ============ ONE TREE: every service grows from one account ============ -->
+<section class="treeBand" id="one-tree">
+  <div class="container treeBand__grid">
+    <div class="treeBand__copy">
+      <p class="kicker">One account, every service</p>
+      <h2>Everything you move grows from <span>one place.</span></h2>
+      <p class="treeBand__lead">Bikes, couriers, trucks, international freight, travel and bills all share the same roots: one login, one wallet and one page to track it all.</p>
+      <ul class="treeBand__list">
+        <li><b>One account</b><span>Personal or business, switch any time.</span></li>
+        <li><b>One wallet</b><span>Pay by UPI or card, add gift cards, get refunds back.</span></li>
+        <li><b>One tracking page</b><span>Every booking, live, from pickup to proof of delivery.</span></li>
+      </ul>
+      <div class="treeBand__cta"><a class="btn btn-primary" href="#signup">Get started free</a><a class="treeBand__link" href="/book/?service=local">Compare prices now →</a></div>
+    </div>
+    <div class="treeBand__art"><div data-ut-tree="home"></div><p class="treeBand__hint">Tap a service to start a booking.</p></div>
+  </div>
+</section>
+
 <section class="whySection" id="why-ut">
   <div class="container">
     <div class="whyHeader">
@@ -359,7 +380,7 @@
           </li>
           <li class="dilemmaItem">
             <span class="dilemmaIcon">✓</span>
-            <span><b>Guaranteed transparent fares:</b> Locked upfront rates with direct fleet pricing and zero hidden surge penalties.</span>
+            <span><b>Upfront fares:</b> The price you book is the price you pay. Anything extra, like waiting time or another stop, is shown before you confirm.</span>
           </li>
           <li class="dilemmaItem">
             <span class="dilemmaIcon">✓</span>
@@ -761,5 +782,14 @@
 <script src="js/home-book.js?v=35"></script>
 <script src="js/home-fx.js?v=35"></script>
 <script src="js/cinematic-footer.js?v=35"></script>
+<script src="js/ut-tree.js?v=2"></script>
+<script>
+// Trust numbers from the live network, so the homepage never claims more than the product does.
+(function () {
+  var set = function (k, v) { var el = document.querySelector('[data-stat="' + k + '"]'); if (el && v) el.textContent = v; };
+  fetch('/v1/public/booking/meta').then(function (r) { return r.json(); }).then(function (m) { set('cities', m.cities.length); set('areas', m.areas.length); set('vehicles', m.vehicles.length); }).catch(function () {});
+  fetch('/v1/public/partners/stats').then(function (r) { return r.json(); }).then(function (p) { set('partners', p.partners); }).catch(function () {});
+})();
+</script>
 </body>
 </html>
