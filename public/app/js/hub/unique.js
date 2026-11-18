@@ -251,6 +251,7 @@ export async function receiverCard(el, x, redo) {
   el.innerHTML = `<div class="od-steps__h"><h2 class="notop">Receiver's choices</h2>${d.linked ? '<span class="badge badge-green">Link shared</span>' : ''}</div>
     <p class="muted small notop">Send the receiver a link. They can pick a delivery slot, leave it with a neighbour or a locker, or add instructions, whichever partner delivers. An address change comes to you to approve.</p>
     ${chosen.length ? `<ul class="rx-list">${chosen.map((c) => `<li>${c}</li>`).join('')}</ul>` : ''}
+    ${d.unboxing ? `<div class="eg-unbox">${d.unboxing.thumb ? `<img src="${esc(d.unboxing.thumb)}" alt="First frame of the unboxing video">` : icon('check', 18)}<div><b>Unboxing video recorded</b><small>${d.unboxing.seconds}s · ${esc(dateTime(d.unboxing.at))}${d.unboxing.sealed ? ' · box sealed at start' : ''}</small><small class="mono">seal ${esc(d.unboxing.seal)}</small></div></div>` : ''}
     ${req ? `<div class="rx-req"><div><b>New address requested</b><small>${esc(req.address)}</small><small>Re-route fee <b translate="no">${esc(money(req.fee))}</b>, paid by you if you approve.</small></div><div class="row"><button class="btn btn-outline btn-sm" type="button" data-rx="no">Decline</button><button class="btn btn-primary btn-sm" type="button" data-rx="yes">Approve and pay</button></div></div>` : ''}
     <button class="btn btn-outline btn-sm" type="button" data-rx="link">${icon('share', 15)}${d.linked ? 'Share the link again' : 'Send the receiver a link'}</button>`;
   el.onclick = async (e) => {

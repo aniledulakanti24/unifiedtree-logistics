@@ -104,7 +104,7 @@ function paint(view, meta, again) {
   const T = TYPES.find((x) => x.key === S.type);
   const dist = km(S.from, S.to);
   view.innerHTML = `<div class="no">
-    <div class="no-head"><div><h1>New order</h1><p>${S.stage === 'form' ? (isIntl() ? 'Ship from India to another country. We compare express, air and sea options.' : 'Fill in the trip and pick a service. We show what is available next.') : `Pick a ${unit()} to see who can carry it.`}</p></div><a class="btn btn-outline" href="#/my/orders">All orders</a></div>
+    <div class="no-head"><div><h1>New order</h1><p>${S.stage === 'form' ? (isIntl() ? 'Ship from India to another country. We compare express, air and sea options.' : 'Fill in the trip and pick a service. We show what is available next.') : `Pick a ${unit()} to see who can carry it.`}</p></div><div class="row">${S.stage === 'form' && !isIntl() ? `<a class="btn btn-ghost" href="#/chat-book">${icon('chat', 15)}Book by chat</a>` : ''}<a class="btn btn-outline" href="#/my/orders">All orders</a></div></div>
     <div class="no-grid"><div class="no-main">${S.stage === 'form' ? formCard(meta, dist) : resultsView(T, dist)}</div>${sideSummary(T, dist)}</div></div>`;
   wire(view, meta, again);
 }
@@ -124,7 +124,7 @@ function formCard(meta, dist) {
   const num = (name, label, attrs = '') => `<label class="field"><span${attrs.includes('required') ? ' class="req"' : ''}>${label}</span><input class="input" name="${name}" inputmode="decimal" value="${esc(d[name] ?? '')}" ${attrs}></label>`;
   const when = `<div class="field"><span>Pickup</span><div class="seg" role="group" aria-label="Pickup time"><label><input type="radio" name="when" value="now" ${d.when !== 'later' ? 'checked' : ''}><span>Now</span></label><label><input type="radio" name="when" value="later" ${d.when === 'later' ? 'checked' : ''}><span>Schedule</span></label></div></div>
     <label class="field" data-later ${d.when === 'later' ? '' : 'hidden'}>Pickup time<input class="input" type="datetime-local" name="pickup_at" value="${esc(d.pickup_at || '')}"></label>`;
-  const helpers = `<label class="field">Loading helpers<select class="select" name="helpers">${[0, 1, 2, 3, 4].map((n) => `<option value="${n}" ${String(d.helpers) === String(n) ? 'selected' : ''}>${n || 'None'}</option>`).join('')}</select></label>`;
+  const helpers = `<label class="field" data-heavy ${Number(d.weight) >= 50 ? '' : 'hidden'}>Loading helpers<select class="select" name="helpers">${[0, 1, 2, 3, 4].map((n) => `<option value="${n}" ${String(d.helpers) === String(n) ? 'selected' : ''}>${n || 'None'}</option>`).join('')}</select></label>`;
   // Courier: one size row per box (up to 20), with "Apply to all" on the first.
   const n = Math.max(1, Math.min(500, Number(d.pieces) || 1));
   const rows = n > MAX_ROWS ? 1 : n;
@@ -157,14 +157,13 @@ function formCard(meta, dist) {
       ${isIntl() ? `<div class="no-type on no-type--intl">${tile('globe', 'blue').value}<span class="grow"><b>International</b><small>DHL, FedEx, Aramex, UPS and more, compared for express, air and sea</small></span><span class="no-type__tick">${icon('check', 18)}</span></div>` : `<fieldset class="no-svc"><legend class="req">Service</legend><div class="no-types" role="radiogroup" aria-label="Service">${types.map((x) => {
         const off = false;
         return `<label class="no-type ${k === x.key ? 'on' : ''} ${off ? 'is-off' : ''}"><input type="radio" name="svc" value="${x.key}" ${k === x.key ? 'checked' : ''} ${off ? 'disabled' : ''}>${tile(x.icon, x.tone).value}<span class="grow"><b>${esc(x.title)}</b><small>${esc(off ? `Only inside one city${dist ? ` (this trip is ${Math.round(dist)} km)` : ''}` : x.desc)}</small></span>${x.key === pick && !off ? '<i class="ws-tag">Suits this trip</i>' : ''}<span class="no-type__tick">${icon('check', 18)}</span></label>`;
-      }).join('')}</div>${types.length < DOMESTIC.length ? '<p class="muted small">More services can be added in <a class="link" href="#/workspace">Workspace</a>.</p>' : ''}<div class="no-ways"><p class="no-ways__h">${icon('sparkle', 14)}More ways to send <small>Only on UT Log</small></p><div class="no-ways__g">${[['#/relay', 'route', 'blue', 'Relay delivery', 'One truck to a hub, bikes to every drop'], ['#/share-truck', 'truck', 'green', 'Share a truck', 'Split a truck between cities and save up to 45%'], ['#/chat-book', 'chat', 'violet', 'Book by chat', 'Type or speak it in your language']].map(([h, ic, tone, t, d]) => `<a class="no-way no-way--${tone}" href="${h}">${tile(ic, tone).value}<span><b>${t}</b><small>${d}</small></span>${icon('chevron', 16)}</a>`).join('')}</div></div></fieldset>`}
+      }).join('')}</div>${types.length < DOMESTIC.length ? '<p class="muted small">More services can be added in <a class="link" href="#/workspace">Workspace</a>.</p>' : ''}${betweenCities() ? `<div class="no-ways" ${Number(d.weight) >= 50 ? '' : 'hidden'}><p class="no-ways__h">${icon('sparkle', 14)}Cheaper ways for this load <small>Only on UT Log</small></p><div class="no-ways__g">${[['#/relay', 'route', 'blue', 'Relay delivery', 'One truck to a hub, bikes to every drop', 50], ['#/share-truck', 'truck', 'green', 'Share a truck', 'Split a truck between cities and save up to 45%', 100]].map(([h, ic, tone, t, dd, min]) => `<a class="no-way no-way--${tone}" href="${h}" data-min="${min}" ${Number(d.weight) >= min ? '' : 'hidden'}>${tile(ic, tone).value}<span><b>${t}</b><small>${dd}</small></span>${icon('chevron', 16)}</a>`).join('')}</div></div>` : ''}</fieldset>`}
       ${T ? `<div class="no-sub"><p class="no-sub__h">${tile(T.icon, T.tone).value}<b>${esc(T.label)}</b></p><div class="form-grid">${sub}</div></div>` : ''}
       <details class="more" ${d.value || d.reference || d.insure ? 'open' : ''}><summary>More options${icon('chevron', 16)}</summary><div class="form-grid more__b">
         ${isIntl() ? '' : `<label class="field">Package value (₹)<input class="input" name="value" inputmode="numeric" value="${esc(d.value || '')}" placeholder="For insurance"><small class="muted" id="noFx"></small></label>`}
         <label class="field">Reference<input class="input" name="reference" value="${esc(d.reference || '')}" placeholder="Your order or invoice number"></label>
         <label class="row insure full"><input type="checkbox" class="check" name="insure" ${d.insure ? 'checked' : ''}> <span>Insure the goods <small class="muted">0.2%, minimum ₹30</small></span></label>
       </div></details>
-      ${!isIntl() ? '<div id="noInstant" class="no-instant" hidden aria-live="polite"></div>' : ''}
       <input type="hidden" name="pay_mode" value="prepaid">
       <p class="form-error" id="noErr"></p>
       <button class="btn btn-primary btn-block no-go" type="submit">${icon('search', 18)}${esc(T ? T.go : 'Show what is available')}</button>
@@ -212,7 +211,11 @@ function resultsView(T, dist) {
     const sub = S.type === 'courier' ? dayRange(list) : S.type === 'international' ? `${dayRange(list)} · up to ${kg(list[0].max_kg || 0)}` : `Up to ${kg(list[0].max_kg || 0)}`;
     return `<button class="no-vic no-vic--${esc(k)} ${S.group === k ? 'on' : ''}" type="button" role="radio" aria-checked="${S.group === k}" data-g="${esc(k)}">${i === 0 && S.type !== 'courier' ? '<i class="no-vic__fit">Best fit</i>' : ''}<span class="no-vic__pic">${pic}</span><b>${esc(groupName(k))}</b><small>${esc(sub)}</small><span class="no-vic__p">from <b translate="no">${esc(money(lo))}</b></span><small class="no-vic__n">${list.length} ${S.type === 'courier' ? 'courier' : 'partner'}${list.length === 1 ? '' : 's'}</small></button>`;
   }).join('');
-  return `${mini}
+  // The cheapest option, bookable in one tap, until a partner is picked.
+  const best = [...S.quote.options].sort((x, y) => x.total - y.total)[0];
+  const bestWhen = best && (best.eta_pickup_min || best.pickup_within_min ? `${best.eta_pickup_min || best.pickup_within_min} min to pickup` : best.eta ? `Delivers by ${date(best.eta)}` : '');
+  const bestCard = best && !S.selected ? `<div class="no-instant"><span class="no-instant__ico">${S.type === 'courier' || S.type === 'international' ? tile('parcel', 'amber').value : `<img src="${vehicleImg(best.vehicle)}" alt="" width="56" height="38">`}</span><div class="grow"><small>Best price for this trip</small><b translate="no">${esc(money(best.total))}<span> · ${esc(groupName2(best))}</span></b><small>${esc(best.provider)}${best.rating ? ` · ★ ${Number(best.rating).toFixed(1)}` : ''}${bestWhen ? ` · ${esc(bestWhen)}` : ''}</small></div><div class="no-instant__a"><button class="btn btn-primary" type="button" data-best="${esc(best.id)}">${icon('check', 16)}Book now</button></div></div>` : '';
+  return `${mini}${bestCard}
     <section class="card no-veh"><div class="no-veh__h"><h2>${S.type === 'international' ? 'Shipping options' : `Available ${noun}`}</h2><small>${S.quote.options.length} prices for this trip</small></div>
       <div class="no-vstrip" role="radiogroup" aria-label="Available ${noun}">${icons}</div></section>
     ${S.group ? `<section class="card no-partners"><div class="no-veh__h"><h2>Partners for ${esc(groupName(S.group))}</h2></div>${partnerStep()}</section>` : `<p class="no-hint">${icon('chevron', 16)}Tap a ${S.type === 'courier' ? 'speed' : S.type === 'logistics' ? 'truck' : S.type === 'international' ? 'shipping option' : 'vehicle'} to see who can carry it.</p>`}`;
@@ -271,7 +274,7 @@ function sideSummary(T, dist) {
   return `<aside class="card no-sum ${sel ? 'no-sum--sel' : ''}" aria-live="polite"><h2>Order summary</h2>
     <dl class="no-sum__dl">${row('Pickup', S.from ? esc(placeLabel(S.from)) : '<span class="muted">Not set</span>')}${row('Drop', S.to ? esc(placeLabel(S.to)) : isIntl() && S.d.country ? esc([S.d.to_city, S.d.country].filter(Boolean).join(', ')) : '<span class="muted">Not set</span>')}${dist ? row('Distance', `${dist.toFixed(1)} km`) : ''}${row('Service', T ? esc(T.title) : '')}${S.quote ? row('Load', esc(detailLine())) : ''}${S.group ? row(T && T.key === 'courier' ? 'Speed' : T && T.key === 'international' ? 'Shipping' : 'Vehicle', esc(groupName(S.group))) : ''}${sel ? row('Partner', esc(sel.provider)) : ''}</dl>
     ${sel && sel.fare ? `<details class="no-fare" ${matchMedia('(min-width: 1101px)').matches ? 'open' : ''}><summary>Fare details${icon('chevron', 15)}</summary><dl>${sel.fare.map((l) => `<div><dt>${esc(l.label)}${l.note ? `<small>${esc(l.note)}</small>` : ''}</dt><dd translate="no">${esc(money(l.amount))}</dd></div>`).join('')}${fee ? `<div><dt>Pay on delivery fee</dt><dd translate="no">${esc(money(fee))}</dd></div>` : ''}</dl>${sel.waiting ? `<p class="no-fare__w">${icon('clock', 13)}${esc(sel.waiting)}</p>` : ''}<p class="no-fare__w">${icon('shield', 13)}No other charges. Price held for <b id="noHold" translate="no">20:00</b></p></details>` : ''}
-    ${sel ? `<div class="no-sum__total"><span>Total${fee ? ' incl. pay on delivery fee' : ''}</span><b translate="no">${esc(money(sel.total + fee))}</b></div><button class="btn btn-primary btn-block" type="button" id="noGo">Continue to pay</button>` : `<p class="muted small notop">${S.stage === 'form' ? 'Fill in the form to see prices.' : S.group ? 'Pick a partner to continue.' : `Pick a ${unit()}, then a partner.`}</p>`}
+    ${sel ? `<div class="no-sum__total"><span>Total${fee ? ' incl. pay on delivery fee' : ''}</span><b translate="no">${esc(money(sel.total + fee))}</b></div><button class="btn btn-primary btn-block" type="button" id="noGo">Continue to pay</button>` : S.stage === 'form' ? '' : `<p class="muted small notop">${S.group ? 'Pick a partner to continue.' : `Pick a ${unit()}, then a partner.`}</p>`}
   </aside>`;
 }
 
@@ -321,6 +324,8 @@ function wire(view, meta, again) {
     const cb = t.closest('[data-cmp]');
     if (cb) { const id = cb.dataset.cmp; S.cmp = cb.checked ? [...new Set([...S.cmp, id])].slice(0, 3) : S.cmp.filter((x) => x !== id); again(); return; }
     if (t.closest('.no-cmp')) return;
+    const bb = t.closest('[data-best]');
+    if (bb) { const o = S.quote.options.find((x) => x.id === bb.dataset.best); if (o) { S.group = groupOf(S.type, o); S.selected = o.id; again(); book(again); } return; }
     const g = t.closest('[data-g]');
     if (g) { S.group = g.dataset.g; S.selected = ''; S.cmp = []; again(); const pnl = view.querySelector('.no-partners'); if (pnl) pnl.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); return; }
     const s = t.closest('[data-sort]');
@@ -342,31 +347,9 @@ function wire(view, meta, again) {
     tick(); holdTimer = setInterval(tick, 1000);
   }
   if (f && !isIntl()) {
-    const box = view.querySelector('#noInstant');
-    const suits = (w) => (betweenCities() ? (w > 3500 ? 'logistics' : w >= 100 ? 'vehicle' : 'courier') : w >= 500 ? 'logistics' : 'vehicle');
-    let tmr = 0; let seq = 0;
-    const instant = async () => {
-      const w = Number(f.weight.value);
-      if (!box || !S.from || !S.to || !(w > 0)) { if (box) box.hidden = true; return; }
-      const type = S.type || suits(w); const mine = ++seq;
-      box.hidden = false; box.innerHTML = `<span class="no-instant__ico">${icon('search', 18)}</span><div class="grow"><small>Finding the best price…</small><i class="skeleton" style="display:block;height:14px;width:60%"></i></div>`;
-      const at = (p) => (type === 'courier' ? p.pincode || p.city : p.area && p.city ? `${p.area}, ${p.city}` : p.city || p.pincode);
-      try {
-        const q = await api('/hub/transport/quote', { method: 'POST', body: { section: type, segment: store.state.accountType === 'business' ? 'b2b' : 'b2c', from_place: at(S.from), to_place: at(S.to), weight: w, pieces: Number(f.pieces && f.pieces.value) || 1, category: f.category ? f.category.value : undefined, from_pt: S.from.lat ? { lat: S.from.lat, lng: S.from.lng } : undefined, to_pt: S.to.lat ? { lat: S.to.lat, lng: S.to.lng } : undefined } });
-        if (mine !== seq) return;
-        if (!q.options || !q.options.length) { box.innerHTML = `<span class="no-instant__ico">${icon('alert', 18)}</span><div class="grow"><small>No ${esc(TYPES.find((x) => x.key === type).title.toLowerCase())} for this trip yet. Try another service.</small></div>`; return; }
-        const best = q.options[0]; const T2 = TYPES.find((x) => x.key === type);
-        const when = best.eta_pickup_min || best.pickup_within_min ? `${best.eta_pickup_min || best.pickup_within_min} min to pickup` : `Delivers by ${date(best.eta)}`;
-        box.innerHTML = `<span class="no-instant__ico">${type === 'courier' ? tile('parcel', 'amber').value : `<img src="${vehicleImg(best.vehicle)}" alt="" width="56" height="38">`}</span>
-          <div class="grow"><small>Best price now · ${esc(T2.title)}${S.type ? '' : ' (suits this trip)'}</small><b translate="no">${esc(money(best.total))}<span> · ${esc(groupName2(best))}</span></b><small>${esc(best.provider)} · ★ ${Number(best.rating).toFixed(1)} · ${esc(when)}</small></div>
-          <div class="no-instant__a"><button class="btn btn-primary" type="button" data-instant>${icon('check', 16)}Book now</button><button class="link" type="button" data-instant-all>See all ${q.options.length}</button></div>`;
-        box.querySelector('[data-instant]').onclick = () => { keepForm(f); S.type = type; S.d = { ...S.d, pieces: Number(S.d.pieces) || 1, helpers: Number(S.d.helpers) || 0 }; S.quote = q; FASTEST = Math.min(...q.options.map(daysOf)); S.group = groupOf(type, best); S.selected = best.id; S.stage = 'results'; again(); book(again); };
-        box.querySelector('[data-instant-all]').onclick = () => { if (!S.type) { S.type = type; keepForm(f); } f.requestSubmit(); };
-      } catch (e) { if (mine === seq) box.innerHTML = `<span class="no-instant__ico">${icon('alert', 18)}</span><div class="grow"><small>${esc(e.message)}</small></div>`; }
-    };
-    const later = () => { clearTimeout(tmr); tmr = setTimeout(instant, 550); };
-    f.addEventListener('input', (e) => { if (['weight', 'pieces'].includes(e.target.name)) later(); });
-    instant();
+    // Show only what fits the load as the weight changes.
+    const fit = () => { const w = Number(f.weight.value) || 0; view.querySelectorAll('[data-heavy]').forEach((x) => { x.hidden = w < 50; }); const ways = view.querySelector('.no-ways'); if (ways) { let any = false; ways.querySelectorAll('[data-min]').forEach((x) => { x.hidden = w < Number(x.dataset.min); any = any || !x.hidden; }); ways.hidden = !any; } };
+    f.addEventListener('input', (e) => { if (e.target.name === 'weight') fit(); });
   }
   if (!f) return;
   // Searchable country picker: type to filter 194 countries by name, region or code.

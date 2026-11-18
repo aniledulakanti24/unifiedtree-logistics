@@ -574,7 +574,7 @@ module.exports = function register(routes, { send, authUser }, ctx) {
       from_city: String(b.route.from || '').split(',').slice(-1)[0].trim(), to_area: area, address: String(b.route.drop_address || '').replace(/^(.{0,18}).*$/, '$1…'),
       can_change: !['OUT_FOR_DELIVERY', 'DELIVERED', 'CANCELLED'].includes(t.status), local: b.service === 'local',
       slots: days.map((d) => ({ date: d, slots: SLOTS })), lockers: [`UT Locker · ${area} Metro station`, `UT Locker · ${area} Market`, `UT Locker · ${area} Post office`],
-      reroute_fee: Math.max(49, Math.round(b.option.total * 0.15)), damage: b.rx.damage || null, prefs: b.rx.prefs, requests: b.rx.requests.map(({ id, address, fee, status, at }) => ({ id, address, fee, status, at })) };
+      reroute_fee: Math.max(49, Math.round(b.option.total * 0.15)), damage: b.rx.damage || null, unboxing: b.rx.unboxing ? { seconds: b.rx.unboxing.seconds, at: b.rx.unboxing.at, seal: b.rx.unboxing.hash.slice(0, 12) } : null, prefs: b.rx.prefs, requests: b.rx.requests.map(({ id, address, fee, status, at }) => ({ id, address, fee, status, at })) };
   };
   const rxOf = (id, k) => { const b = bookings.get(String(id || '').toUpperCase()); return b && b.rx && b.rx.key === String(k || '') ? b : null; };
   routes['GET /v1/public/receiver'] = async (req, res, body, url) => {
@@ -586,6 +586,15 @@ module.exports = function register(routes, { send, authUser }, ctx) {
     const b = rxOf(body.id, body.k);
     if (!b) return send(res, 404, { message: 'This link has expired or is not right.' });
     const v = rxView(b);
+    if (body.action === 'unboxing') {
+      // Only a fingerprint of the video, its length and one small frame are kept; the video stays on the phone.
+      const hashv = String(body.hash || ''); const seconds = Math.round(Number(body.seconds) || 0); const thumb = String(body.thumb || '');
+      if (!/^[a-f0-9]{64}$/.test(hashv)) return send(res, 400, { message: 'The video could not be read. Record it again.' });
+      if (seconds < 3 || seconds > 600) return send(res, 400, { message: 'Record at least 3 seconds, from the sealed box to the product.' });
+      if (thumb && (!/^data:image\/jpeg;base64,[A-Za-z0-9+/=]+$/.test(thumb) || thumb.length > 90000)) return send(res, 400, { message: 'The preview image is too large.' });
+      b.rx.unboxing = { hash: hashv, seconds, size: Math.round(Number(body.size) || 0), thumb, sealed: !!body.sealed, at: new Date().toISOString() };
+      return send(res, 200, rxView(b));
+    }
     if (body.action === 'damage') {
       const note = String(body.note || '').replace(/[<>]/g, '').trim().slice(0, 200);
       if (note.length < 4) return send(res, 400, { message: 'Tell us what is damaged.' });

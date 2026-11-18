@@ -1149,6 +1149,7 @@ module.exports = function register(routes, { send }, ctx, engine) {
     if (!text(body.name) || !/^[6-9]\d{9}$/.test(body.phone || '')) throw oops(400, 'Enter the traveller name and a 10-digit mobile number.');
     const later = body.pay_mode === 'cod' && o.pay_later;
     const deal = priceWith(h, o.section, base, body);
+    if (late.policyGate) late.policyGate(h, o, deal.payable, body);
     if (body.dry_run) return dryRun(res, h, deal.payable);
     const via = later ? {} : settle(db, h, deal.payable, `${o.record_title} · ${o.provider}`, body.payment_id);
     settleDeal(h, deal, o.record_title);

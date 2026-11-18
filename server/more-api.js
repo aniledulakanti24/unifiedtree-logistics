@@ -254,7 +254,7 @@ module.exports = function register(routes, { send }, ctx, bookingCtx, hubCtx) {
   const sweepClaims = (db, h) => {
     for (const r of h.records || []) {
       // A receiver reported damage on their link page.
-      if (r.booking_id && !r.claim) { const b = engine.bookingById(r.booking_id); if (b && b.rx && b.rx.damage) autoClaim(r, 'receiver', b.rx.damage.note); }
+      if (r.booking_id && !r.claim) { const b = engine.bookingById(r.booking_id); if (b && b.rx && b.rx.damage) { autoClaim(r, 'receiver', b.rx.damage.note); if (r.claim && b.rx.unboxing) { r.claim.evidence = { kind: 'Unboxing video', seconds: b.rx.unboxing.seconds, seal: b.rx.unboxing.hash.slice(0, 12), sealed: b.rx.unboxing.sealed }; if (r.claim.decide_at) r.claim.decide_at = Date.now() + 20000; if (r.claim.status === 'WITH_CARRIER') r.claim.carrier_note = 'Unboxing video attached: the carrier cannot say it left in good shape.'; } else if (r.claim) r.claim.evidence = null; } }
       if (r.freight && r.freight.pod && r.freight.pod.damage && !r.claim) autoClaim(r, 'proof of delivery', r.freight.pod.remarks);
       if (r.claim && r.claim.auto && r.claim.status === 'UNDER_REVIEW' && r.claim.decide_at <= Date.now()) { r.claim.status = 'APPROVED'; r.claim.paid_at = iso(Date.now()); credit(db, r.claim.payout, `Insurance payout · ${r.claim.insurer} · ${r.id}`); }
     }

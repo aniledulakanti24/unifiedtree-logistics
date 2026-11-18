@@ -156,11 +156,11 @@ export function openPlacePicker({ kind = 'pickup', start = null, other = null, s
             <label class="field full">House, flat or shop number<input class="input" name="house" value="${esc(prev.house || '')}" placeholder="e.g. Shop 4, Sai Residency" autocomplete="address-line1" required></label>
             <label class="field full">Street and area<input class="input" name="street" value="${esc(prev.street || (p.address && !/^Near /.test(p.address) ? p.address : [p.area, p.city].filter(Boolean).join(', ')))}" autocomplete="address-line2"></label>
             ${goods ? `<label class="field">Floor<select class="select" name="floor">${FLOORS.map(([v, l]) => `<option value="${v}" ${String(prev.floor ?? '') === v ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
-            <fieldset class="field pl-lift"><legend>Lift for goods?</legend><div class="seg"><label><input type="radio" name="lift" value="yes" ${prev.lift === true ? 'checked' : ''}><span>Yes</span></label><label><input type="radio" name="lift" value="no" ${prev.lift === false ? 'checked' : ''}><span>No</span></label></div></fieldset>` : ''}
+            <fieldset class="field pl-lift" ${/^[1-9]/.test(String(prev.floor ?? '')) ? '' : 'hidden'}><legend>Lift for goods?</legend><div class="seg"><label><input type="radio" name="lift" value="yes" ${prev.lift === true ? 'checked' : ''}><span>Yes</span></label><label><input type="radio" name="lift" value="no" ${prev.lift === false ? 'checked' : ''}><span>No</span></label></div></fieldset>` : ''}
             <label class="field full">Landmark (optional)<input class="input" name="landmark" value="${esc(prev.landmark || '')}" placeholder="e.g. Opposite Metro pillar 112"></label>
             ${goods ? `<p class="pl-h full">${kind === 'pickup' ? 'Who hands it over' : 'Who receives it'}</p>
-            <label class="field">Name <span class="req" aria-hidden="true"></span><input class="input" name="cname" value="${esc(c.name || '')}" autocomplete="name" required aria-required="true"></label>
-            <label class="field">Mobile <span class="req" aria-hidden="true"></span><input class="input" name="cphone" value="${esc(c.phone || '')}" inputmode="numeric" maxlength="10" autocomplete="tel-national" required aria-required="true"></label>` : ''}
+            <label class="field"><span class="req">Name</span><input class="input" name="cname" value="${esc(c.name || '')}" autocomplete="name" required aria-required="true"></label>
+            <label class="field"><span class="req">Mobile</span><input class="input" name="cphone" value="${esc(c.phone || '')}" inputmode="numeric" maxlength="10" autocomplete="tel-national" required aria-required="true"></label>` : ''}
             <div class="full pl-save"><label class="row"><input type="checkbox" class="check" name="save" ${saveDefault ? 'checked' : ''}> Save this place</label><div class="pl-kinds" role="radiogroup" aria-label="Save as">${['Home', 'Office', 'Shop', 'Warehouse', 'Other'].map((k, i) => `<label class="chip-pick"><input type="radio" name="kind" value="${k}" ${i === (store.state.accountType === 'business' ? 2 : 0) ? 'checked' : ''}><span>${k}</span></label>`).join('')}</div></div>
             <p class="form-error full" id="plErr"></p>
           </form>`;
@@ -169,6 +169,8 @@ export function openPlacePicker({ kind = 'pickup', start = null, other = null, s
         const syncSave = () => { host.querySelector('.pl-kinds').hidden = !f.save.checked && kind !== 'place'; };
         if (kind === 'place') { f.save.checked = true; f.save.closest('label').hidden = true; }
         f.save.addEventListener('change', syncSave); syncSave();
+        // A lift only matters above the ground floor.
+        if (f.floor) f.floor.addEventListener('change', () => { const up = /^[1-9]/.test(f.floor.value); const lf = host.querySelector('.pl-lift'); lf.hidden = !up; if (!up) lf.querySelectorAll('input').forEach((x) => { x.checked = false; }); });
         host.querySelector('#plRepin').onclick = () => { point = [p.lat, p.lng]; stepPin(p); };
         foot.querySelector('#plBack').onclick = () => { point = [p.lat, p.lng]; stepPin(p); };
         foot.querySelector('#plDone').onclick = async () => {

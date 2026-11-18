@@ -4,6 +4,7 @@ import { tile } from './art.js';
 import { deskTabs } from './desk.js';
 import { payMethods, BOOKING_PAY } from './checkout.js';
 import { walletCheckout, payWithApproval } from './wallet-checkout.js';
+import { policyBlock } from './edge.js';
 import { svcHero, BADGES } from './svc-hero.js';
 import { icon } from './icons.js';
 import { sortChips, tagBadges, star, payChoice, statusPill, emptyScene, withFunds, refresh, mountDeals, filterBtn, openFilters, countActive } from './ui.js';
@@ -292,7 +293,7 @@ function book(o, k, done, lock) {
             if (!r) return;
           } else r = await withFunds(() => book_({}));
           close(r); refresh(); done(); }
-        catch (e) { if (!e.quiet) el.querySelector('#tfErr').textContent = e.message; }
+        catch (e) { if (e.data && e.data.policy) policyBlock(el.querySelector('#tfErr'), e.data.policy); else if (!e.quiet) el.querySelector('#tfErr').textContent = e.message; }
       }));
     },
   });

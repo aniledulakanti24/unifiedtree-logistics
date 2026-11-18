@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Pay your share</title>
+  <meta name="robots" content="noindex">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root { --brand: #3b2a78; --brand2: #6d4fd8; --line: #E1E7E5; --ink: #101C18; --ink3: #6B7874; --soft: #EFEAFD; --ok: #0B5D45; --oksoft: #E6F4EF; }
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: 'Inter', system-ui, sans-serif; background: #F6F7F9; color: var(--ink); }
+    header { background: linear-gradient(120deg, #1f1640, var(--brand) 55%, var(--brand2)); color: #fff; padding: 22px 16px 34px; }
+    .wrap, main { max-width: 520px; margin: 0 auto; }
+    header h1 { margin: 0; font-size: 21px; } header p { margin: 4px 0 0; opacity: .85; font-size: 14px; }
+    main { padding: 0 16px 32px; margin-top: -18px; display: grid; gap: 12px; }
+    .card { background: #fff; border-radius: 18px; padding: 18px; box-shadow: 0 2px 10px rgba(20, 10, 60, .06); }
+    .amt { font-size: 34px; font-weight: 700; letter-spacing: -.02em; margin: 4px 0; } .muted { color: var(--ink3); font-size: 13px; }
+    .bar { height: 8px; border-radius: 99px; background: #eceaf3; overflow: hidden; margin: 12px 0 6px; } .bar i { display: block; height: 100%; background: linear-gradient(90deg, var(--brand2), #0e7c66); }
+    ul { list-style: none; padding: 0; margin: 8px 0 0; display: grid; gap: 8px; }
+    li { display: flex; align-items: center; gap: 10px; font-size: 14px; } li .av { width: 30px; height: 30px; border-radius: 10px; display: grid; place-items: center; font-size: 12px; font-weight: 700; color: #fff; background: var(--brand2); }
+    li.paid .av { background: var(--ok); } li span.st { margin-left: auto; font-size: 12px; color: var(--ink3); } li.paid span.st { color: var(--ok); font-weight: 600; }
+    .apps { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin: 12px 0; }
+    .apps button { border: 1px solid var(--line); background: #fff; border-radius: 12px; padding: 10px 4px; font: inherit; font-size: 12.5px; cursor: pointer; }
+    .apps button[aria-pressed="true"] { border-color: var(--brand2); background: var(--soft); color: var(--brand); font-weight: 600; }
+    .go { width: 100%; border: 0; border-radius: 12px; padding: 13px 16px; background: var(--brand); color: #fff; font: inherit; font-weight: 700; font-size: 15px; cursor: pointer; }
+    .done { padding: 12px 14px; border-radius: 12px; background: var(--oksoft); color: var(--ok); font-size: 14px; font-weight: 600; }
+    .err { color: #B8322F; font-size: 13px; min-height: 1em; margin: 6px 0 0; }
+    footer { text-align: center; color: var(--ink3); font-size: 12px; padding: 8px 16px 24px; }
+  </style>
+</head>
+<body>
+  <header><div class="wrap"><h1 id="t">Pay your share</h1><p id="sub">Split-pay group booking</p></div></header>
+  <main id="main"><div class="card muted">Loading…</div></main>
+  <footer>UT Log books it only after everyone has paid. If someone does not pay in time, everyone is refunded in full.</footer>
+  <script>
+    (function () {
+      var q = new URLSearchParams(location.search); var g = q.get('g'); var k = q.get('k'); var app = 'gpay';
+      var main = document.getElementById('main');
+      function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
+      function inr(n) { return '₹' + Number(n).toLocaleString('en-IN'); }
+      function left(iso) { var ms = Date.parse(iso) - Date.now(); if (ms <= 0) return 'Time is up'; var h = Math.floor(ms / 36e5), m = Math.floor((ms % 36e5) / 6e4); return (h ? h + ' h ' : '') + m + ' min left to pay'; }
+      function ini(n) { return String(n || '?').split(/\s+/).map(function (w) { return w[0]; }).slice(0, 2).join('').toUpperCase(); }
+      function draw(d) {
+        document.getElementById('t').textContent = d.title;
+        document.getElementById('sub').textContent = d.organiser + ' is booking for ' + d.members.length + ' people';
+        var paid = d.members.filter(function (m) { return m.paid; }).length;
+        main.innerHTML = '<section class="card"><div class="muted">Hi ' + esc(d.you.name) + ', your share</div><div class="amt">' + inr(d.you.share) + '</div><div class="muted">of ' + inr(d.total) + ' · ' + (d.status === 'COLLECTING' ? esc(left(d.deadline)) : d.status === 'CONFIRMED' ? 'Booked' : 'Not completed') + '</div>' +
+          '<div class="bar"><i style="width:' + Math.round(paid / d.members.length * 100) + '%"></i></div><div class="muted">' + paid + ' of ' + d.members.length + ' paid</div>' +
+          '<ul>' + d.members.map(function (m) { return '<li class="' + (m.paid ? 'paid' : '') + '"><span class="av">' + esc(ini(m.name)) + '</span>' + esc(m.name) + (m.me ? ' (organiser)' : '') + '<span class="st">' + (m.paid ? 'Paid' : 'Waiting') + '</span></li>'; }).join('') + '</ul></section>' +
+          (d.you.paid ? '<div class="done">' + (d.status === 'CONFIRMED' ? 'Everyone has paid. It is booked; ' + esc(d.organiser) + ' has the tickets.' : 'You have paid. We will book it once everyone has paid.') + '</div>'
+            : d.status !== 'COLLECTING' ? '<div class="card">This booking was not completed. Nothing was charged.</div>'
+              : '<section class="card"><b>Pay with UPI</b><div class="apps">' + [['gpay', 'GPay'], ['phonepe', 'PhonePe'], ['paytm', 'Paytm'], ['bhim', 'BHIM']].map(function (a) { return '<button type="button" data-app="' + a[0] + '" aria-pressed="' + (a[0] === app) + '">' + a[1] + '</button>'; }).join('') + '</div><button class="go" id="pay" type="button">Pay ' + inr(d.you.share) + '</button><p class="muted">Demo: no real money moves.</p><p class="err" id="err" role="alert"></p></section>');
+        main.onclick = function (e) {
+          var a = e.target.closest('[data-app]'); if (a) { app = a.dataset.app; main.querySelectorAll('[data-app]').forEach(function (b) { b.setAttribute('aria-pressed', String(b === a)); }); return; }
+          if (e.target.id === 'pay') { e.target.disabled = true; e.target.textContent = 'Paying…';
+            fetch('/v1/public/splitpay', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ g: g, k: k, app: app }) })
+              .then(function (r) { return r.json().then(function (j) { if (!r.ok) throw new Error(j.message); return j; }); }).then(draw)
+              .catch(function (x) { var er = document.getElementById('err'); if (er) er.textContent = x.message; e.target.disabled = false; e.target.textContent = 'Try again'; }); }
+        };
+      }
+      if (!g || !k) { main.innerHTML = '<div class="card">This link is not complete. Ask the organiser to share it again.</div>'; return; }
+      fetch('/v1/public/splitpay?g=' + encodeURIComponent(g) + '&k=' + encodeURIComponent(k))
+        .then(function (r) { return r.json().then(function (j) { if (!r.ok) throw new Error(j.message); return j; }); }).then(draw)
+        .catch(function (e) { main.innerHTML = '<div class="card">' + esc(e.message || 'This link has expired.') + '</div>'; });
+    })();
+  </script>
+</body>
+</html>

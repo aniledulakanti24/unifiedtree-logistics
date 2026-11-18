@@ -53,6 +53,7 @@ const control = lazy(() => import('./hub/control.js'));
 const freight = lazy(() => import('./hub/freight.js'));
 const unique = lazy(() => import('./hub/unique.js'));
 const more = lazy(() => import('./hub/more.js'));
+const edge = lazy(() => import('./hub/edge.js'));
 import { startOrderAlerts } from './hub/notify.js';
 import { setupApp, maybeTour } from './hub/experience.js';
 import { installSmoothScroll, watchView, resetScroll, progressStart, progressDone } from './hub/motion.js';
@@ -93,7 +94,7 @@ const ROUTES = [
   ['pay/mobile', pay.renderMobile], ['pay/fastag', pay.renderFastag], ['pay/bills', bills.renderBills], ['pay/send', bills.renderSend], ['pay/vouchers', bills.renderVouchers], ['pay/gold', bills.renderGold], ['pay/business', pay.renderBusiness], ['autopay', pay.renderAutopay],
   ['wallet', wallet.render], ['profile', profile.render], ['rewards', insights.renderRewards], ['insights', insights.renderInsights],
   ['my/orders', hubOrders.renderOrders], ['my/orders/:id', hubOrders.renderOrderDetail], ['my/returns', hubOrders.renderReturns], ['my/weight', hubWeight.render], ['help', hubHelp.renderHelp], ['feedback', hubHelp.renderFeedback],
-  ['intel', intel.render], ['services/:kind', travel.render], ['business/spend', control.renderSpend], ['business/integrations', control.renderIntegrations], ['business/credit', freight.renderCredit], ['business/carbon', unique.renderCarbon], ['relay', unique.renderRelay], ['share-truck', unique.renderShare], ['chat-book', unique.renderChatBook], ['moving', more.renderMoving], ['trips', more.renderTrips], ['gifting', more.renderGifting], ['family', more.renderFamily], ['business/carriers', freight.renderCarriers],
+  ['intel', intel.render], ['services/:kind', travel.render], ['business/spend', control.renderSpend], ['business/integrations', control.renderIntegrations], ['business/credit', freight.renderCredit], ['business/carbon', unique.renderCarbon], ['relay', unique.renderRelay], ['share-truck', unique.renderShare], ['chat-book', unique.renderChatBook], ['moving', more.renderMoving], ['trips', more.renderTrips], ['gifting', more.renderGifting], ['family', more.renderFamily], ['cabshare', edge.renderCabShare], ['splitpay', edge.renderSplitPay], ['weight-proof', edge.renderWeightProof], ['address-check', edge.renderAddressCheck], ['return-pool', edge.renderReturnPool], ['travel-policy', edge.renderPolicy], ['business/carriers', freight.renderCarriers],
   ['holidays', holidayPage.render], ['business/access', accessPage.render],
   ['business/tracking', business.renderTracking], ['business/whatsapp', business.renderWhatsApp], ['business/gst', business.renderGst], ['business/notifications', business.renderNotifications],
   // Seller tools.
@@ -165,6 +166,9 @@ const NAV = [
   { key: 'my-orders', label: 'All Orders', icon: 'box2', path: '#/my/orders', mod: 'orders', match: '^(my/orders|bookings|new-order|vehicle|courier|logistics|international|services/)' },
   { key: 'my-returns', label: 'All Returns', icon: 'returnbox', path: '#/my/returns', mod: 'returns', match: '^my/returns' },
   { key: 'my-weight', label: 'Weight Management', icon: 'scale', path: '#/my/weight', mod: 'weight', match: '^my/weight' },
+  { key: 'wproof', label: 'Weight proof', icon: 'scale', path: '#/weight-proof', mod: 'weight', match: '^weight-proof' },
+  { key: 'addr', label: 'Address check', icon: 'pin', path: '#/address-check', mod: 'orders', match: '^address-check' },
+  { key: 'rpool', label: 'Return pooling', icon: 'returnbox', path: '#/return-pool', mod: 'returns', match: '^return-pool' },
   { key: 'intel', label: 'Courier Intelligence', icon: 'radar', path: '#/intel', mod: 'orders', match: '^intel' },
   { key: 'holidays', label: 'Partner Holidays', icon: 'calendar', path: '#/holidays', mod: 'holidays', match: '^holidays' },
   { group: 'Business', business: true },
@@ -172,6 +176,7 @@ const NAV = [
   { key: 'b-wa', label: 'WhatsApp', icon: 'whatsapp', path: '#/business/whatsapp', mod: 'whatsapp', business: true, match: '^business/whatsapp' },
   { key: 'b-trips', label: 'Trip expenses', icon: 'plane', path: '#/trips', business: true, match: '^trips' },
   { key: 'b-gift', label: 'Bulk gifting', icon: 'gift', path: '#/gifting', business: true, match: '^gifting' },
+  { key: 'b-policy', label: 'Travel policy', icon: 'file', path: '#/travel-policy', business: true, match: '^travel-policy' },
   { key: 'b-carbon', label: 'Carbon report', icon: 'leaf', path: '#/business/carbon', business: true, match: '^business/carbon' },
   { key: 'b-credit', label: 'Business credit', icon: 'card', path: '#/business/credit', mod: 'wallet', business: true, match: '^business/credit' },
   { key: 'b-carriers', label: 'Carrier connections', icon: 'plug', path: '#/business/carriers', business: true, owner: true, match: '^business/carriers' },
@@ -285,7 +290,7 @@ sideNav.addEventListener('click', (e) => {
 document.getElementById('askBtn').addEventListener('click', openAsk);
 const NEW_ITEMS = [
   ['Ship', [['parcel', 'amber', 'Send a parcel', 'Courier by pincode', '#/new-order?type=courier', 'booking'], ['bike', 'green', 'Book a vehicle', 'Bike, auto or van in town', '#/new-order?type=vehicle', 'booking'], ['truck', 'blue', 'Truck load', 'Full trucks between cities', '#/new-order?type=logistics', 'booking'], ['globe', 'violet', 'International', 'Ship abroad', '#/international/book', 'booking'], ['building', 'rose', 'Movers & storage', 'Packers, warehousing', '#/services/movers', 'booking'], ['route', 'blue', 'Relay delivery', 'Truck to hub, bikes to drops', '#/relay', 'booking'], ['truck', 'green', 'Share a truck', 'Split with a business', '#/share-truck', 'booking'], ['chat', 'green', 'Book by chat', 'Type or speak it', '#/chat-book', 'booking'], ['home', 'violet', 'Moving house', 'Movers, bills, address', '#/moving', 'booking'], ['gift', 'rose', 'Bulk gifting', 'Send to a list', '#/gifting', 'booking']]],
-  ['Travel', [['plane', 'blue', 'Flight', 'Every airline', '#/travel/flights', 'travel'], ['train', 'green', 'Train', 'Tickets and PNR', '#/travel/trains', 'travel'], ['hotel', 'violet', 'Hotel', 'Rooms and stays', '#/travel/hotels', 'travel'], ['ride', 'amber', 'Local ride', 'Cab, auto, bike', '#/rides', 'travel']]],
+  ['Travel', [['plane', 'blue', 'Flight', 'Every airline', '#/travel/flights', 'travel'], ['ride', 'amber', 'Arrival cab-share', 'Split a cab off the train', '#/cabshare', 'travel'], ['team', 'violet', 'Split-pay group', 'Everyone pays their share', '#/splitpay', 'travel'], ['train', 'green', 'Train', 'Tickets and PNR', '#/travel/trains', 'travel'], ['hotel', 'violet', 'Hotel', 'Rooms and stays', '#/travel/hotels', 'travel'], ['ride', 'amber', 'Local ride', 'Cab, auto, bike', '#/rides', 'travel']]],
   ['Pay', [['phone', 'green', 'Recharge', 'Mobile and DTH', '#/pay/mobile', 'recharge'], ['bill', 'amber', 'Pay a bill', '41 bill types', '#/book-pay', 'recharge'], ['fastag', 'coral', 'FASTag', 'Top up a tag', '#/pay/fastag', 'recharge'], ['rupee', 'blue', 'Send money', 'UPI or bank', '#/pay/send', 'recharge']]],
 ];
 // Big tiles across the top of the menu: the things people start most.

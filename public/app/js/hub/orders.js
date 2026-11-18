@@ -2,6 +2,7 @@
 import { api, esc, money, store, toast, modal, withBusy, dateTime, date, pager, formData } from '../core.js';
 import { walletCheckout } from './wallet-checkout.js';
 import { luggageAhead, receiverCard, strandedHtml, wireStranded } from './unique.js';
+import { weightProofCard, addressCard } from './edge.js';
 import { mergeBanner } from './more.js';
 import { tile, scene } from './art.js';
 import { statusPill, withFunds, refresh, downloadCsv, filterBtn, openFilters, countActive, SECTION_LABEL } from './ui.js';
@@ -275,13 +276,13 @@ export async function renderOrderDetail(view, { id }) {
     </dl>${x.cashback || x.earned ? `<div class="od-earn">${x.cashback ? `<span>${icon('tag', 14)}${esc(money(x.cashback))} cashback</span>` : ''}${x.earned ? `<span>${icon('star', 14)}${x.earned} points earned</span>` : ''}</div>` : ''}</section>`;
   const extras = `${x.return ? `<section class="card"><h2 class="notop">Return</h2><p class="notop"><span class="badge badge-amber">${esc(x.return.label)}</span></p><a class="link" href="#/my/returns">View return</a></section>` : ''}
     ${x.weight_case ? `<section class="card"><h2 class="notop">Weight check</h2><dl class="od-kv">${row('Declared', `${x.weight_case.declared} kg`)}${row('Charged', `${x.weight_case.charged} kg`)}</dl><a class="link" href="#/my/weight?tab=disputes">Review</a></section>` : ''}
-    ${x.claim ? `<section class="card od-claim od-claim--${x.claim.status === 'APPROVED' ? 'ok' : x.claim.status === 'WITH_CARRIER' ? 'carrier' : 'wait'}"><h2 class="notop">${icon('shield', 16)}${esc(x.claim.type)} claim${x.claim.auto ? ' · filed for you' : ''}</h2><p class="notop">${x.claim.status === 'APPROVED' ? `${esc(x.claim.insurer || 'Insurer')} paid <b translate="no">${esc(money(x.claim.payout))}</b> to your wallet.` : x.claim.status === 'WITH_CARRIER' ? `Not insured, so it went to ${esc(x.claim.carrier)} under their own liability (up to <span translate="no">${esc(money(x.claim.carrier_limit || 0))}</span>). We follow it up for you.` : `${esc(x.claim.insurer || 'The insurer')} is checking the photos. Payout about <b translate="no">${esc(money(x.claim.payout))}</b>.`}</p>${x.claim.auto ? `<small class="muted">Filed automatically from the ${esc(x.claim.source)}${x.claim.note ? `: "${esc(x.claim.note)}"` : ''}.</small>` : ''}</section>` : ''}
+    ${x.claim ? `<section class="card od-claim od-claim--${x.claim.status === 'APPROVED' ? 'ok' : x.claim.status === 'WITH_CARRIER' ? 'carrier' : 'wait'}"><h2 class="notop">${icon('shield', 16)}${esc(x.claim.type)} claim${x.claim.auto ? ' · filed for you' : ''}</h2>${x.claim.evidence ? `<p class="eg-evid notop">${icon('check', 14)}${esc(x.claim.evidence.kind)} attached · ${x.claim.evidence.seconds}s${x.claim.evidence.sealed ? ', box sealed at start' : ''} · seal ${esc(x.claim.evidence.seal)}</p>` : x.claim.source === 'receiver' ? '<p class="muted small notop">No unboxing video, so the insurer checks it by hand.</p>' : ''}<p class="notop">${x.claim.status === 'APPROVED' ? `${esc(x.claim.insurer || 'Insurer')} paid <b translate="no">${esc(money(x.claim.payout))}</b> to your wallet.` : x.claim.status === 'WITH_CARRIER' ? `Not insured, so it went to ${esc(x.claim.carrier)} under their own liability (up to <span translate="no">${esc(money(x.claim.carrier_limit || 0))}</span>). We follow it up for you.` : `${esc(x.claim.insurer || 'The insurer')} is checking the photos. Payout about <b translate="no">${esc(money(x.claim.payout))}</b>.`}</p>${x.claim.auto ? `<small class="muted">Filed automatically from the ${esc(x.claim.source)}${x.claim.note ? `: "${esc(x.claim.note)}"` : ''}.</small>` : ''}</section>` : ''}
     ${x.can_return ? '<button class="btn btn-outline btn-block" id="ret" type="button">Create return</button>' : ''}
     <section class="card od-help"><b>Need help with this order?</b><small>Quote ${esc(x.id)}. Most questions are answered within an hour.</small><a class="btn btn-outline btn-sm" href="#/support?new=1&ref=${encodeURIComponent(x.id)}">${icon('chat', 15)}Chat with support</a></section>`;
 
   const freight = x.freight ? '<section class="card od-freight" id="odFreight"><div class="skeleton" style="height:140px"></div></section>' : '';
   const rx = x.booking_id && !['delivered', 'cancelled'].includes(x.group) && x.status !== 'CANCELLED' ? '<section class="card od-rx" id="odRx"><div class="skeleton" style="height:90px"></div></section>' : '';
-  const main = type === 'ship' ? `${strandedHtml(x)}${x.status === 'CANCELLED' ? '' : progress}${rx}${freight}${route}<div class="od-two">${partner}${pkg}</div>${activity}`
+  const main = type === 'ship' ? `${strandedHtml(x)}${x.status === 'CANCELLED' ? '' : progress}${rx}${freight}${route}<div class="od-two">${partner}${pkg}</div><div class="${x.drop_address ? 'od-two eg-two' : ''}"><section class="card eg-odcard" id="odWp"><div class="skeleton" style="height:120px"></div></section>${x.drop_address ? '<section class="card eg-odcard" id="odAddr"><div class="skeleton" style="height:120px"></div></section>' : ''}</div>${activity}`
     : type === 'trip' ? `${ticket}${route}${activity}`
       : receipt;
   view.innerHTML = `<div class="od">${hero}${x.sample ? '<p class="od-sample">This is a sample order from your account history.</p>' : ''}
@@ -297,6 +298,8 @@ export async function renderOrderDetail(view, { id }) {
   on('#ret', () => createReturn(id, redo));
   if (x.freight) freightCard(view.querySelector('#odFreight'), x, redo);
   if (view.querySelector('#odRx')) receiverCard(view.querySelector('#odRx'), x, redo);
+  if (view.querySelector('#odWp')) weightProofCard(view.querySelector('#odWp'), x);
+  if (view.querySelector('#odAddr')) addressCard(view.querySelector('#odAddr'), x);
   wireStranded(view, x, redo);
   on('#lug', () => luggageAhead(x, redo));
   view.querySelectorAll('[data-copy]').forEach((b) => b.addEventListener('click', async () => { try { await navigator.clipboard.writeText(b.dataset.copy); toast('Copied'); } catch (e) { toast(b.dataset.copy); } }));

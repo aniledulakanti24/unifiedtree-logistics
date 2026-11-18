@@ -133,7 +133,7 @@ module.exports = function register(routes, { send }, ctx, bookingCtx, hubCtx) {
   routes['GET /v1/hub/orders/receiver'] = hub(({ res, url, h }) => {
     const r = recOf(h, url.searchParams.get('id'));
     const b = engine.bookingById(r.booking_id);
-    send(res, 200, b && b.rx ? { linked: true, prefs: b.rx.prefs, requests: b.rx.requests } : { linked: false, prefs: {}, requests: [] });
+    send(res, 200, b && b.rx ? { linked: true, prefs: b.rx.prefs, requests: b.rx.requests, unboxing: b.rx.unboxing ? { seconds: b.rx.unboxing.seconds, at: b.rx.unboxing.at, thumb: b.rx.unboxing.thumb, seal: b.rx.unboxing.hash.slice(0, 12), sealed: b.rx.unboxing.sealed } : null, damage: b.rx.damage || null } : { linked: false, prefs: {}, requests: [] });
   });
   // An address change asked by the receiver costs a re-route fee; the sender approves and pays it, or declines.
   routes['POST /v1/hub/orders/receiver-request'] = hub(({ res, body, db, h }) => {

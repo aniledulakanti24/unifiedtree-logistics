@@ -14,11 +14,13 @@ export async function outlookCard(el, { section, from, to, date: when }) {
   if (!el || !from || !to) return;
   let d; try { d = await api('/hub/outlook', { query: { section, from, to, date: when } }); } catch (e) { el.remove(); return; }
   const v = d.price.advice.verdict; const mx = Math.max(...d.price.days.map((x) => x.index)); const mn = Math.min(...d.price.days.map((x) => x.index));
-  el.innerHTML = `<div class="ol ${d.disruptions.length ? 'ol--warn' : ''}">
-    <div class="ol-price"><div class="ol-h"><span class="ol-tag ol-tag--${v}">${v === 'now' ? `${icon('alert', 13)}Book now` : v === 'wait' ? `${icon('clock', 13)}Can wait` : `${icon('check', 13)}Steady`}</span><b>Price outlook · next 14 days</b></div>
+  // Nothing to act on: one quiet line instead of a chart.
+  if (v === 'steady' && !d.disruptions.length) { el.innerHTML = `<p class="ol-line">${icon('check', 14)}Prices on this route are steady for 2 weeks, and nothing is disrupting it.</p>`; return; }
+  el.innerHTML = `<div class="ol ${d.disruptions.length ? 'ol--warn' : 'ol--solo'}">
+    <div class="ol-price"><div class="ol-h"><span class="ol-tag ol-tag--${v}">${v === 'now' ? `${icon('alert', 13)}Book now` : v === 'wait' ? `${icon('clock', 13)}Can wait` : `${icon('check', 13)}Steady`}</span><b>Price outlook · next 14 days</b>${d.disruptions.length ? '' : `<span class="ol-ok">${icon('shield', 12)}No disruptions</span>`}</div>
       <div class="ol-bars" role="img" aria-label="Price trend for 14 days">${d.price.days.map((x, i) => `<i class="${i === 0 ? 'today' : ''} ${x.festival ? 'fest' : ''}" style="--h:${Math.round(18 + ((x.index - mn) / Math.max(1, mx - mn)) * 82)}%" title="${esc(new Date(x.date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' }))} · ${x.index}${x.festival ? ` · ${esc(x.festival)} rush` : ''}"></i>`).join('')}</div>
       <p>${esc(d.price.advice.text)}</p><small>${esc(d.price.based_on)}</small></div>
-    ${d.disruptions.length ? `<div class="ol-dis">${d.disruptions.map((x) => `<div class="ol-ev">${icon(x.kind === 'rain' || x.kind === 'fog' ? 'drop' : x.kind === 'strike' ? 'alert' : x.kind === 'festival' ? 'sparkle' : 'map', 16)}<div><b>${esc(x.title)} · up to ${x.delay_hours} h late</b><small>${esc(x.detail)}</small><small class="ol-better">${icon('check', 12)}${esc(x.better)}</small></div></div>`).join('')}</div>` : `<div class="ol-dis ol-dis--ok">${icon('shield', 16)}<div><b>No disruptions on this route</b><small>Weather, strikes and road works are checked for the pickup day.</small></div></div>`}
+    ${d.disruptions.length ? `<div class="ol-dis">${d.disruptions.map((x) => `<div class="ol-ev">${icon(x.kind === 'rain' || x.kind === 'fog' ? 'drop' : x.kind === 'strike' ? 'alert' : x.kind === 'festival' ? 'sparkle' : 'map', 16)}<div><b>${esc(x.title)} · up to ${x.delay_hours} h late</b><small>${esc(x.detail)}</small><small class="ol-better">${icon('check', 12)}${esc(x.better)}</small></div></div>`).join('')}</div>` : ''}
   </div>`;
 }
 

@@ -66,8 +66,26 @@
           '</div><p class="muted" style="margin:10px 0 4px">Or leave it with a neighbour</p><div class="row"><input id="nbName" placeholder="Their name" value="' + esc(p.leave && p.leave.type === 'neighbour' ? p.leave.name : '') + '"><input id="nbFlat" placeholder="Flat or house no." value="' + esc(p.leave && p.leave.type === 'neighbour' ? p.leave.flat : '') + '"></div><button class="go" type="button" id="nbGo" ' + (lock ? 'disabled' : '') + '>Save neighbour</button>' + (p.leave ? ' <button class="go" type="button" id="clr" style="background:#fff;color:#0B5D45;border:1px solid #E1E7E5">I will be in</button>' : '') + '</section>' +
           '<section class="card"><h2>Instructions for the rider</h2><textarea id="note" rows="2" maxlength="160" placeholder="e.g. Ring the bell twice, gate code 1234">' + esc(p.note ? p.note.text : '') + '</textarea><button class="go" type="button" id="noteGo" ' + (lock ? 'disabled' : '') + '>Save instructions</button></section>' +
           '<section class="card"><h2>Deliver to a different address</h2>' + (pend ? '<div class="done">Waiting for the sender to approve: ' + esc(pend.address) + '</div>' : (last && last.status !== 'pending' ? '<p class="muted">Your last request was ' + esc(last.status) + '.</p>' : '') + '<textarea id="addr" rows="2" placeholder="Full new address"></textarea><p class="muted">The sender approves and pays the re-route fee (₹' + d.reroute_fee + ').</p><button class="go" type="button" id="addrGo" ' + (lock ? 'disabled' : '') + '>Ask the sender</button>') + '</section>' +
+          (d.unboxing ? '<section class="card"><h2>Unboxing video</h2><div class="done">Recorded, ' + d.unboxing.seconds + ' seconds. The video stays on your phone; only its fingerprint (' + esc(d.unboxing.seal) + ') is kept as proof.</div></section>'
+            : (d.delivered || d.status === 'OUT_FOR_DELIVERY') ? '<section class="card"><h2>Record the unboxing</h2><p class="muted" style="margin:0 0 10px">Start with the sealed box, then open it on camera. If anything is damaged, the video settles the claim quickly.</p><label class="opt" style="justify-content:center;font-weight:600"><input type="file" id="vid" accept="video/*" capture="environment" hidden>🎥 <span>Record or choose a video</span></label><label class="muted" style="display:flex;gap:8px;align-items:center;margin-top:10px"><input type="checkbox" id="sealed" style="width:auto" checked> The box was sealed when I started</label><p class="muted" id="vidSt" style="margin:8px 0 0"></p></section>'
+            : '<section class="card"><h2>When it arrives</h2><p class="muted" style="margin:0">Come back to this link to record the unboxing. If anything is damaged, the video settles the claim quickly.</p></section>') +
           (d.delivered || d.status === 'OUT_FOR_DELIVERY' ? '<section class="card"><h2>Arrived damaged?</h2>' + (d.damage ? '<div class="done">Reported. A claim has been filed for the sender; you do not need to do anything else.</div>' : '<textarea id="dmg" rows="2" placeholder="What is damaged? e.g. box crushed, 2 bottles broken"></textarea><button class="go" type="button" id="dmgGo">Report damage</button>') + '</section>' : '') +
           '<p class="err" id="err" role="alert"></p>';
+        main.onchange = function (e) {
+          if (e.target.id !== 'vid' || !e.target.files[0]) return;
+          var f = e.target.files[0]; var st = document.getElementById('vidSt');
+          if (f.size > 300 * 1024 * 1024) { st.textContent = 'That video is too large. Keep it under 300 MB.'; return; }
+          if (!window.crypto || !crypto.subtle) { st.textContent = 'This browser cannot seal the video. Open the link in Chrome or Safari.'; return; }
+          st.textContent = 'Sealing the video…';
+          var url = URL.createObjectURL(f); var v = document.createElement('video'); v.muted = true; v.playsInline = true; v.preload = 'auto'; v.src = url;
+          var meta = new Promise(function (ok) { v.onloadedmetadata = function () { v.currentTime = Math.min(1, (v.duration || 2) / 2); }; v.onseeked = function () { var c = document.createElement('canvas'); var w = 240; c.width = w; c.height = Math.round(w * (v.videoHeight || 180) / (v.videoWidth || 240)); try { c.getContext('2d').drawImage(v, 0, 0, c.width, c.height); ok({ seconds: v.duration, thumb: c.toDataURL('image/jpeg', 0.6) }); } catch (x) { ok({ seconds: v.duration, thumb: '' }); } }; v.onerror = function () { ok({ seconds: 0, thumb: '' }); }; });
+          Promise.all([f.arrayBuffer().then(function (buf) { return crypto.subtle.digest('SHA-256', buf); }), meta]).then(function (r) {
+            URL.revokeObjectURL(url);
+            var hex = Array.prototype.map.call(new Uint8Array(r[0]), function (x) { return ('0' + x.toString(16)).slice(-2); }).join('');
+            var thumb = r[1].thumb && r[1].thumb.length < 90000 ? r[1].thumb : '';
+            post({ action: 'unboxing', hash: hex, seconds: Math.round(r[1].seconds || 0), size: f.size, thumb: thumb, sealed: document.getElementById('sealed').checked }, 'Unboxing video sealed. If anything is damaged, report it below and the video is attached to the claim.');
+          }).catch(function () { st.textContent = 'The video could not be read. Try again.'; });
+        };
         main.onclick = function (e) {
           var t = e.target.closest('button'); if (!t || t.disabled) return;
           if (t.dataset.day) { day = t.dataset.day; draw(); return; }
@@ -76,7 +94,7 @@
           if (t.id === 'nbGo') return post({ action: 'neighbour', name: document.getElementById('nbName').value, flat: document.getElementById('nbFlat').value }, 'Saved. If you are out, it goes to your neighbour.');
           if (t.id === 'clr') return post({ action: 'clear' }, 'Saved. The rider will deliver to you.');
           if (t.id === 'noteGo') return post({ action: 'note', text: document.getElementById('note').value }, 'Instructions saved for the rider.');
-          if (t.id === 'dmgGo') return post({ action: 'damage', note: document.getElementById('dmg').value }, 'Damage reported. The sender's claim is filed automatically.');
+          if (t.id === 'dmgGo') return post({ action: 'damage', note: document.getElementById('dmg').value }, 'Damage reported. A claim is filed for the sender automatically.');
           if (t.id === 'addrGo') return post({ action: 'address', address: document.getElementById('addr').value }, 'Sent to the sender to approve.');
         };
       }

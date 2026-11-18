@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Confirm your address</title>
+  <meta name="robots" content="noindex">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root { --brand: #1d3f73; --brand2: #2a78d6; --line: #E1E7E5; --ink: #101C18; --ink3: #6B7874; --soft: #EAF2FD; --ok: #0B5D45; --oksoft: #E6F4EF; }
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: 'Inter', system-ui, sans-serif; background: #F6F7F9; color: var(--ink); }
+    header { background: linear-gradient(120deg, #0f2342, var(--brand) 55%, var(--brand2)); color: #fff; padding: 22px 16px 34px; }
+    .wrap, main { max-width: 520px; margin: 0 auto; }
+    header h1 { margin: 0; font-size: 21px; } header p { margin: 4px 0 0; opacity: .85; font-size: 14px; }
+    main { padding: 0 16px 32px; margin-top: -18px; display: grid; gap: 12px; }
+    .card { background: #fff; border-radius: 18px; padding: 18px; box-shadow: 0 2px 10px rgba(10, 30, 60, .06); }
+    .addr { font-size: 16px; line-height: 1.5; padding: 12px 14px; border-radius: 12px; background: var(--soft); margin: 8px 0 0; }
+    .muted { color: var(--ink3); font-size: 13px; } h2 { margin: 0 0 6px; font-size: 16px; }
+    input, textarea { width: 100%; border: 1px solid var(--line); border-radius: 10px; padding: 11px; font: inherit; margin-top: 6px; }
+    .go { width: 100%; border: 0; border-radius: 12px; padding: 13px 16px; background: var(--brand); color: #fff; font: inherit; font-weight: 700; font-size: 15px; cursor: pointer; margin-top: 10px; }
+    .alt { background: #fff; color: var(--brand); border: 1px solid var(--line); }
+    .done { padding: 12px 14px; border-radius: 12px; background: var(--oksoft); color: var(--ok); font-size: 14px; font-weight: 600; }
+    .err { color: #B8322F; font-size: 13px; min-height: 1em; margin: 6px 0 0; }
+    footer { text-align: center; color: var(--ink3); font-size: 12px; padding: 8px 16px 24px; }
+  </style>
+</head>
+<body>
+  <header><div class="wrap"><h1>Is this the right address?</h1><p>Your parcel is about to be sent. One tap helps it reach you first time.</p></div></header>
+  <main id="main"><div class="card muted">Loading…</div></main>
+  <footer>Sent with UT Log. Your answer goes only to the seller of this order.</footer>
+  <script>
+    (function () {
+      var q = new URLSearchParams(location.search); var c = q.get('c'); var k = q.get('k'); var main = document.getElementById('main'); var editing = false;
+      function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (x) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[x]; }); }
+      function send(body) {
+        body.c = c; body.k = k;
+        return fetch('/v1/public/address', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+          .then(function (r) { return r.json().then(function (j) { if (!r.ok) throw new Error(j.message); return j; }); }).then(draw)
+          .catch(function (e) { var er = document.getElementById('err'); if (er) er.textContent = e.message; });
+      }
+      function draw(d) {
+        if (d.status !== 'SENT') { main.innerHTML = '<section class="card"><div class="done">' + (d.status === 'UPDATED' ? 'Thank you. The seller has your corrected address.' : 'Thank you. Your address is confirmed.') + '</div><div class="addr">' + esc(d.address) + (d.landmark ? '<br><span class="muted">Landmark: ' + esc(d.landmark) + '</span>' : '') + '</div></section>'; return; }
+        main.innerHTML = '<section class="card"><h2>Hi ' + esc(d.name) + ', we have this address</h2><div class="addr">' + esc(d.address) + '</div><p class="muted">Phone on the order: ' + esc(d.phone) + '</p></section>' +
+          '<section class="card"><h2>Add a landmark</h2><p class="muted" style="margin:0">Riders find you faster with one. Optional.</p><input id="lm" maxlength="80" placeholder="e.g. Opposite the Ganesh temple"></section>' +
+          (editing ? '<section class="card"><h2>Correct address</h2><textarea id="na" rows="3">' + esc(d.address) + '</textarea><button class="go" id="save" type="button">Save the correct address</button></section>'
+            : '<section class="card"><button class="go" id="yes" type="button">Yes, this is right</button><button class="go alt" id="edit" type="button">No, let me correct it</button></section>') + '<p class="err" id="err" role="alert"></p>';
+        main.onclick = function (e) {
+          var lm = (document.getElementById('lm') || {}).value || '';
+          if (e.target.id === 'yes') send({ action: 'confirm', landmark: lm });
+          if (e.target.id === 'edit') { editing = true; draw(d); }
+          if (e.target.id === 'save') send({ action: 'edit', address: document.getElementById('na').value, landmark: lm });
+        };
+      }
+      if (!c || !k) { main.innerHTML = '<div class="card">This link is not complete. Ask the seller to send it again.</div>'; return; }
+      fetch('/v1/public/address?c=' + encodeURIComponent(c) + '&k=' + encodeURIComponent(k))
+        .then(function (r) { return r.json().then(function (j) { if (!r.ok) throw new Error(j.message); return j; }); }).then(draw)
+        .catch(function (e) { main.innerHTML = '<div class="card">' + esc(e.message || 'This link has expired.') + '</div>'; });
+    })();
+  </script>
+</body>
+</html>
