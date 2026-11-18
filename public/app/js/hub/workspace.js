@@ -24,6 +24,8 @@ export const FOCUS = [
   { key: 'everyday', label: 'Everyday payments & travel', icon: 'phone', desc: 'Recharges, bills, travel bookings and the odd bike delivery.', on: ['vehicle', 'travel', 'pay'] },
   { key: 'all', label: 'Everything', icon: 'dashboard', desc: 'Every UT Log service in the sidebar.', on: MODULES.map((m) => m.key) },
 ];
+// Booked through New order, not separate sidebar items.
+const SHIP = ['vehicle', 'courier', 'logistics', 'international', 'services'];
 const isBusiness = () => store.state.accountType === 'business';
 const isOwner = () => !store.state.user || !store.state.user.role || store.state.user.role === 'owner';
 const relevant = (m) => !m.business || isBusiness();
@@ -31,7 +33,7 @@ const relevant = (m) => !m.business || isBusiness();
 export const workspace = () => (store.state.profile && store.state.profile.workspace) || null;
 // With no profile loaded yet, show everything rather than flash an empty sidebar.
 export const modOn = (key) => { const w = workspace(); return !w || !key || w.on.includes(key); };
-export const moduleOfPath = (path) => { const p = String(path || '').replace(/^#\/?/, '').split('?')[0]; const m = MODULES.find((x) => x.re.test(p)); return m ? m.key : null; };
+export const moduleOfPath = (path) => { const [p, qs] = String(path || '').replace(/^#\/?/, '').split('?'); if (p === 'new-order') return new URLSearchParams(qs || '').get('type') || null; const m = MODULES.find((x) => x.re.test(p)); return m ? m.key : null; };
 export const pathOn = (path) => modOn(moduleOfPath(path));
 // The switched-off service that blocks this page, if any.
 export const blockedBy = (path) => { const k = moduleOfPath(path); const m = k && MODULES.find((x) => x.key === k); return m && relevant(m) && !modOn(k) ? k : null; };
@@ -79,8 +81,9 @@ export async function render(view) {
           ${groups.map((g) => `<p class="ws-group">${esc(g)}</p><ul class="ws-list">${mods.filter((m) => m.group === g).map((m) => `<li><span class="ws-ico">${icon(m.icon, 18)}</span><span class="grow"><b>${esc(m.label)}</b><small>${esc(m.desc)}</small></span><label class="switch" title="${w.on.includes(m.key) ? 'Switch off' : 'Switch on'}"><input type="checkbox" data-mod="${m.key}" ${w.on.includes(m.key) ? 'checked' : ''} ${owner ? '' : 'disabled'} aria-label="${esc(m.label)}"><i></i></label></li>`).join('')}</ul>`).join('')}
         </section>
         <aside class="card ws-sec ws-preview"><div class="card-h"><div><h2>Your sidebar</h2><small>What everyone on this account sees</small></div></div>
-          <ul class="ws-side"><li>${icon('dashboard', 16)}Overview</li>${mods.filter((m) => w.on.includes(m.key)).map((m) => `<li class="on">${icon(m.icon, 16)}${esc(m.label)}</li>`).join('')}<li>${icon('box', 16)}All Orders</li><li>${icon('wallet', 16)}Wallet</li></ul>
-          <p class="muted small">Always there: Overview, All Orders, Wallet, Help and Settings. Your role can still limit what each person opens.</p></aside>
+          <ul class="ws-side"><li>${icon('dashboard', 16)}Dashboard</li>${mods.filter((m) => w.on.includes(m.key) && !SHIP.includes(m.key)).map((m) => `<li class="on">${icon(m.icon, 16)}${esc(m.label)}</li>`).join('')}<li>${icon('box', 16)}All Orders</li><li>${icon('wallet', 16)}Wallet</li></ul>
+          <p class="muted small">Shipping services (${esc(mods.filter((m) => w.on.includes(m.key) && SHIP.includes(m.key)).map((m) => m.label.replace(/ \(.*\)/, '')).join(', ') || 'none')}) are booked from All Orders → Add order.</p>
+          <p class="muted small">Always there: Dashboard, All Orders, Wallet, Help and Settings. Your role can still limit what each person opens.</p></aside>
       </div></div>`;
   };
   draw();

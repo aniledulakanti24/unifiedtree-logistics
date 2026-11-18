@@ -1,8 +1,8 @@
 // Overview: the CRM-style dashboard. Numbers are compared with the period before.
-import { api, esc, money, store, dateTime, date } from '../core.js';
+import { api, esc, money, store, dateTime, date, toast, withBusy } from '../core.js';
 import { tile } from './art.js';
 import { icon } from './icons.js';
-import { bars, hbars, statusPill, SECTION_ICON } from './ui.js';
+import { bars, hbars, statusPill, SECTION_ICON, withFunds, refresh } from './ui.js';
 import { smartAction } from '../palette.js';
 import { applyWidgets, customise } from './experience.js';
 import { dateRangeField, mountDateRange, toApi, resolve } from './daterange.js';
@@ -10,11 +10,6 @@ import { pathOn, focusLabel, hiddenCount, workspace, MODULES } from './workspace
 
 const read = (k, d) => { try { const v = localStorage.getItem(k); return v == null ? d : JSON.parse(v); } catch (e) { return d; } };
 const write = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} };
-const SERVICES = [
-  ['Ship & move', [['Vehicle', 'bike', '#/vehicle/book', 'green'], ['Courier', 'parcel', '#/courier/book', 'amber'], ['Logistics', 'truck', '#/logistics/book', 'blue'], ['International', 'globe', '#/international/book', 'violet'], ['Movers', 'building', '#/services/movers', 'coral']]],
-  ['Travel', [['Flights', 'plane', '#/travel/flights', 'blue'], ['Trains', 'train', '#/travel/trains', 'green'], ['Buses', 'bus', '#/travel/buses', 'coral'], ['Hotels', 'hotel', '#/travel/hotels', 'violet'], ['Rides', 'ride', '#/rides', 'amber']]],
-  ['Pay', [['Mobile', 'phone', '#/pay/mobile', 'green'], ['FASTag', 'fastag', '#/pay/fastag', 'coral'], ['Bills', 'bill', '#/pay/bills', 'blue'], ['Send money', 'rupee', '#/pay/send', 'violet'], ['Wallet', 'wallet', '#/wallet', 'amber']]],
-];
 // Example searches, each tied to the service it opens, so only workspace services are suggested.
 const ALL_HINTS = [['200 kg from Koramangala to Whitefield', '#/vehicle'], ['5 kg from 560034 to 400053', '#/courier'], ['2 tonnes from Bengaluru to Chennai', '#/logistics'], ['10 kg to Dubai', '#/international'], ['flight from Bengaluru to Delhi', '#/travel/flights'], ['hotel in Goa', '#/travel/hotels'], ['recharge 9876543210', '#/pay/mobile'], ['bike from Indiranagar to MG Road', '#/vehicle']];
 const hints = () => { const h = ALL_HINTS.filter(([, path]) => pathOn(path)).map(([t]) => t); return h.length ? h : ALL_HINTS.map(([t]) => t); };
@@ -118,7 +113,8 @@ export async function render(view) {
   if (range === 'all') range = 'last30';
   const rng = resolve(range);
   view.innerHTML = '<div class="skeleton" style="height:120px;margin-bottom:14px"></div><div class="kpis">' + '<div class="skeleton" style="height:140px"></div>'.repeat(8) + '</div>';
-  const d = await api('/hub/overview', { query: toApi(range) });
+  // The live panels are extra: if they fail, the rest of the dashboard still shows.
+  const [d, lv] = await Promise.all([api('/hub/overview', { query: toApi(range) }), api('/hub/overview/live', { query: toApi(range) }).catch(() => null)]);
   const p = store.state.profile || {};
   const who = p.account_type === 'business' && p.company ? p.company : (p.name || 'Your account');
   const first = (p.name || '').split(' ')[0];
@@ -126,47 +122,47 @@ export async function render(view) {
   const gsHidden = read('ut-gs-hide', false);
   const nextStep = d.start.steps.find((s) => !s.done);
   view.innerHTML = `
-    <div class="ov-head"><div><h1>Overview</h1><p>${esc(who)} · ${esc(today)}${workspace() ? ` · <a class="ws-chip" href="#/workspace" title="Change what you see">${icon('dashboard', 13)}${esc(focusLabel())}</a>` : ''}</p></div>
+    <div class="ov-head"><div><h1>Dashboard</h1><p>${esc(who)} · ${esc(today)}${workspace() ? ` · <a class="ws-chip" href="#/workspace" title="Change what you see">${icon('dashboard', 13)}${esc(focusLabel())}</a>` : ''}</p></div>
       <div class="ov-tools">${dateRangeField(range)}
         <button class="btn btn-outline" id="print" type="button">${icon('printer', 16)}Print or PDF</button><button class="btn btn-primary" id="custom" type="button">${icon('sliders', 16)}Customize</button></div></div>
     ${wsNote()}
-    ${nextStep && !gsHidden ? `<section class="card gs-card"><span class="gs-ico">${icon('rocket', 20)}</span><div class="gs-main"><b>Getting started: ${d.start.done} of ${d.start.total} done</b><small>Next: ${esc(nextStep.label)}.</small><div class="gs-bar"><i style="width:${(d.start.done / d.start.total) * 100}%"></i></div></div><a class="btn btn-primary" href="${esc(nextStep.href)}">Continue</a><button class="btn" id="gsHide" type="button">Hide</button>
-      <div class="gs-steps">${d.start.steps.map((s) => `<a href="${esc(s.href)}" class="${s.done ? 'done' : ''}">${s.done ? icon('check', 14) : ''}${esc(s.label)}</a>`).join('')}</div></section>` : ''}
-    <section class="hero" data-w="ask">
+    ${nextStep && !gsHidden ? `<section class="card gs-card gs-card--slim"><span class="gs-ico">${icon('rocket', 16)}</span><b class="gs-t">Getting started ${d.start.done}/${d.start.total}</b><div class="gs-bar"><i style="width:${(d.start.done / d.start.total) * 100}%"></i></div><span class="gs-n">Next: ${esc(nextStep.label)}</span>
+      <details class="gs-more"><summary>All steps</summary><div class="gs-steps">${d.start.steps.map((s) => `<a href="${esc(s.href)}" class="${s.done ? 'done' : ''}">${s.done ? icon('check', 14) : ''}${esc(s.label)}</a>`).join('')}</div></details>
+      <a class="btn btn-primary btn-sm" href="${esc(nextStep.href)}">Continue</a><button class="btn btn-sm" id="gsHide" type="button">Hide</button></section>` : ''}
+    <section class="hero hero--compact" data-w="ask">
       <i class="hero__orb hero__orb--a"></i><i class="hero__orb hero__orb--b"></i>
       <div class="hero__main">
         <p class="hero__k">${esc(greeting())}${first ? `, ${esc(first)}` : ''}</p>
         <h1>What do you need today?</h1>
         <form class="hero__search" id="smart" role="search"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3 1.900 5.600L19.500 10l-5.600 1.900L12 17.500l-1.900-5.600L4.500 10l5.600-1.400z"/></svg><input id="smartQ" autocomplete="off" aria-label="Tell us what you need" placeholder="Try: ${esc(hints()[0])}"><button class="btn" type="submit">Go</button></form>
         <p class="hero__err" id="smartErr" role="status"></p>
-        <div class="hero__chips">${hints().slice(0, 4).map((h) => `<button type="button" data-hint="${esc(h)}">${esc(h)}</button>`).join('')}</div>
+        <div class="hero__chips">${hints().slice(0, 3).map((h) => `<button type="button" data-hint="${esc(h)}">${esc(h)}</button>`).join('')}</div>
       </div>
       ${BOT}
     </section>
     <p class="ov-note">Compared with the ${d.days === 1 ? 'day' : `${d.days} days`} before. Active orders, wallet and to-dos always show today's position.</p>
     <div class="kpis" data-w="kpi">${d.kpis.map(kpiCard).join('')}</div>
-    <div class="ov-2">
-      <section class="card" data-w="insights"><div class="card-h"><div><h2>What the numbers say</h2><small>${esc(rng.label)}, from your records</small></div><a class="link" href="#/insights">View all</a></div>
-        ${d.insights.length ? `<ul class="ins-list">${d.insights.map((i) => `<li class="tone-${i.tone}">${icon(TONE_ICON[i.tone], 17)}<a href="${esc(i.href)}">${esc(i.text)}</a></li>`).join('')}</ul>` : `<div class="ov-empty">${icon('check', 26)}Nothing unusual. Everything is on track.</div>`}</section>
-      <section class="card" data-w="attention"><div class="card-h"><h2>Needs attention</h2></div>
-        ${d.attention.length ? `<ul class="att-list">${d.attention.map((a) => `<li><a href="${esc(a.href)}"><span class="ico">${icon(a.icon === 'returnbox' ? 'returnbox' : a.icon, 16)}</span><span class="grow"><b>${a.count}</b>${esc(a.text)}</span>${icon('chevron', 16).replace('class="li"', 'class="li chev"')}</a></li>`).join('')}</ul>` : `<div class="ov-empty">${icon('check', 26)}Nothing needs you right now.</div>`}</section>
-    </div>
-    <div class="ov-2">
-      <section class="card" data-w="todo"><div class="card-h"><div><h2>What to do first</h2><small>Ranked by urgency, using fixed rules</small></div></div>
-        ${d.todo.length ? `<ul class="todo-list">${d.todo.map((t) => `<li><a href="${esc(t.href)}"><span class="ico">${icon(t.icon, 16)}</span><span class="grow"><b>${esc(t.title)}</b><small>${esc(t.sub)}</small></span>${icon('chevron', 16).replace('class="li"', 'class="li chev"')}</a></li>`).join('')}</ul>` : `<div class="ov-empty">${icon('check', 26)}You are all caught up.</div>`}</section>
-      <section class="card" data-w="services"><div class="card-h"><div><h2>Book or pay</h2><small>Services in your workspace · one place</small></div></div>
-        ${SERVICES.map(([g, list]) => [g, list.filter((x) => pathOn(x[2]) || x[2] === '#/wallet')]).filter(([, list]) => list.length > (list.some((x) => x[2] === '#/wallet') ? 1 : 0)).map(([g, list]) => `<div class="ov-svc-group"><small>${esc(g)}</small><div class="ov-svc">${list.map(([l, i, h, t]) => `<a href="${h}">${tile(i, t).value}<span>${esc(l)}</span></a>`).join('')}</div></div>`).join('')}</section>
+    ${lv ? `<section class="card pipe" data-w="pipeline" id="pipeCard">${pipeline(lv, rng.label)}</section>` : ''}
+    <div class="ov-cols">
+      <div class="ov-col">
+        ${lv ? `<section class="card" data-w="live" id="liveCard">${liveCard(lv)}</section>` : ''}
+        <section class="card" data-w="attention"><div class="card-h"><h2>Needs attention</h2></div>
+          ${d.attention.length ? `<ul class="att-list">${d.attention.map((a) => `<li><a href="${esc(a.href)}"><span class="ico">${icon(a.icon === 'returnbox' ? 'returnbox' : a.icon, 16)}</span><span class="grow"><b>${a.count}</b>${esc(a.text)}</span>${icon('chevron', 16).replace('class="li"', 'class="li chev"')}</a></li>`).join('')}</ul>` : `<div class="ov-empty ov-empty--sm">${icon('check', 18)}Nothing needs you right now.</div>`}</section>
+        <section class="card" data-w="todo"><div class="card-h"><div><h2>What to do first</h2><small>Ranked by urgency, using fixed rules</small></div></div>
+          ${d.todo.length ? `<ul class="todo-list">${d.todo.map((t) => `<li><a href="${esc(t.href)}"><span class="ico">${icon(t.icon, 16)}</span><span class="grow"><b>${esc(t.title)}</b><small>${esc(t.sub)}</small></span>${icon('chevron', 16).replace('class="li"', 'class="li chev"')}</a></li>`).join('')}</ul>` : `<div class="ov-empty ov-empty--sm">${icon('check', 18)}You are all caught up.</div>`}</section>
+        <section class="card" data-w="charts"><div class="card-h"><div><h2>Daily spend</h2><small>Last ${d.series.length} days</small></div><a class="link" href="#/insights">Insights</a></div><div id="spendBars"></div></section>
+        <section class="card" data-w="recent"><div class="card-h"><h2>Recent activity</h2><a class="link" href="#/my/orders?scope=all&days=">View all</a></div>
+          ${d.recent.length ? `<ul class="feed">${d.recent.map((r) => `<li>${tile(SECTION_ICON[r.section] || 'parcel', 'green').value}<div class="feed__t"><b>${esc(r.title)}</b><small>${esc(r.provider)} · ${esc(r.sub || '')}</small></div><div class="feed__r"><b translate="no">${esc(money(r.amount))}</b><small>${esc(dateTime(r.at))}</small></div>${statusPill(r)}</li>`).join('')}</ul>` : '<div class="ov-empty ov-empty--sm">Nothing here yet.</div>'}</section>
+      </div>
+      <div class="ov-col">
+        ${lv ? `<section class="card" data-w="store" id="storeCard">${storeCard(lv.store)}</section><section class="card" data-w="partners" id="partnersCard">${partnersCard(lv.partners, rng.label)}</section>` : ''}
+        <section class="card" data-w="insights"><div class="card-h"><div><h2>What the numbers say</h2><small>${esc(rng.label)}, from your records</small></div><a class="link" href="#/insights">View all</a></div>
+          ${d.insights.length ? `<ul class="ins-list">${d.insights.map((i) => `<li class="tone-${i.tone}">${icon(TONE_ICON[i.tone], 17)}<a href="${esc(i.href)}">${esc(i.text)}</a></li>`).join('')}</ul>` : `<div class="ov-empty ov-empty--sm">${icon('check', 18)}Nothing unusual. Everything is on track.</div>`}</section>
+        <section class="card" data-w="mix"><div class="card-h"><div><h2>Spend by service</h2><small>${esc(rng.label)}</small></div></div>${d.by_service.length ? hbars(d.by_service) : '<div class="ov-empty ov-empty--sm">Spend appears after your first booking.</div>'}</section>
+        <section class="card" data-w="upcoming"><div class="card-h"><h2>Coming up</h2><a class="link" href="#/autopay">Manage</a></div>
+          ${d.upcoming.length ? `<ul class="feed">${d.upcoming.map((u) => `<li><div class="feed__t"><b>${esc(u.provider)}</b><small>${u.auto ? 'Auto-pay' : 'Reminder'} · ${esc(date(u.due))}</small></div><div class="feed__r"><b translate="no">${esc(money(u.amount))}</b><small>${u.days ? `In ${u.days} day${u.days > 1 ? 's' : ''}` : 'Today'}</small></div></li>`).join('')}</ul>` : '<div class="ov-empty ov-empty--sm">Connect a bill or mobile number in Auto-pay to see due dates here.</div>'}</section>
         ${hiddenCount() ? `<a class="ws-more" href="#/workspace">${icon('plus', 16)}Add services <small>${hiddenCount()} more available</small></a>` : ''}
-    </div>
-    <div class="ov-2">
-      <section class="card" data-w="charts"><div class="card-h"><div><h2>Daily spend</h2><small>Last ${d.series.length} days</small></div><a class="link" href="#/insights">Insights</a></div><div id="spendBars"></div></section>
-      <section class="card" data-w="mix"><div class="card-h"><div><h2>Spend by service</h2><small>${esc(rng.label)}</small></div></div>${d.by_service.length ? hbars(d.by_service) : '<div class="ov-empty">Spend appears after your first booking.</div>'}</section>
-    </div>
-    <div class="ov-2">
-      <section class="card" data-w="recent"><div class="card-h"><h2>Recent activity</h2><a class="link" href="#/my/orders?scope=all&days=">View all</a></div>
-        ${d.recent.length ? `<ul class="feed">${d.recent.map((r) => `<li>${tile(SECTION_ICON[r.section] || 'parcel', 'green').value}<div class="feed__t"><b>${esc(r.title)}</b><small>${esc(r.provider)} · ${esc(r.sub || '')}</small></div><div class="feed__r"><b translate="no">${esc(money(r.amount))}</b><small>${esc(dateTime(r.at))}</small></div>${statusPill(r)}</li>`).join('')}</ul>` : '<div class="ov-empty">Nothing here yet.</div>'}</section>
-      <section class="card" data-w="upcoming"><div class="card-h"><h2>Coming up</h2><a class="link" href="#/autopay">Manage</a></div>
-        ${d.upcoming.length ? `<ul class="feed">${d.upcoming.map((u) => `<li><div class="feed__t"><b>${esc(u.provider)}</b><small>${u.auto ? 'Auto-pay' : 'Reminder'} · ${esc(date(u.due))}</small></div><div class="feed__r"><b translate="no">${esc(money(u.amount))}</b><small>${u.days ? `In ${u.days} day${u.days > 1 ? 's' : ''}` : 'Today'}</small></div></li>`).join('')}</ul>` : '<div class="ov-empty">Connect a bill or mobile number in Auto-pay to see due dates here.</div>'}</section>
+      </div>
     </div>`;
   bars(view.querySelector('#spendBars'), d.series, 'Daily spend');
   applyWidgets(view);
@@ -184,5 +180,74 @@ export async function render(view) {
   // Rotating example, paused while the box is in use.
   let n = 0;
   const timer = setInterval(() => { if (document.activeElement !== q && !q.value) { const hs = hints(); n = (n + 1) % hs.length; q.placeholder = `Try: ${hs[n]}`; } }, 3200);
-  return () => clearInterval(timer);
+  // Live panels: track and ship from here, and refresh every 30 seconds.
+  const paintLive = (x) => {
+    const set = (id, html) => { const el = view.querySelector(id); if (el) el.innerHTML = html; };
+    set('#pipeCard', pipeline(x, rng.label)); set('#liveCard', liveCard(x)); set('#storeCard', storeCard(x.store)); set('#partnersCard', partnersCard(x.partners, rng.label));
+  };
+  const reload = () => api('/hub/overview/live', { query: toApi(range) }).then(paintLive).catch(() => {});
+  const onLive = async (e) => {
+    const t = e.target.closest('[data-live-track]');
+    if (t) { (await import('./tracking.js')).openTracking(t.dataset.liveTrack); return; }
+    const s = e.target.closest('[data-ship-all]');
+    if (s) await withBusy(s, () => shipAll(reload));
+  };
+  view.addEventListener('click', onLive);
+  const liveTimer = lv ? setInterval(() => { if (!document.hidden && !document.querySelector('.modal')) reload(); }, 30000) : null;
+  return () => { clearInterval(timer); clearInterval(liveTimer); view.removeEventListener('click', onLive); };
+}
+
+// ---- live panels ------------------------------------------------------------------------------
+const STAGE_LINK = { booked: 'new', pickup: 'assigned', transit: 'transit', delivered: 'delivered', cancelled: 'cancelled' };
+function pipeline(x, label) {
+  const sum = x.pipeline.reduce((s, p) => s + p.count, 0);
+  return `<div class="card-h"><div><h2>Shipment pipeline</h2><small>${x.total} ${x.total === 1 ? 'shipment' : 'shipments'} booked · ${esc(label)} · ${x.moving} on the move now</small></div><a class="link" href="#/my/orders?scope=all">All orders</a></div>
+    ${sum ? `<div class="pipe__bar" role="img" aria-label="${esc(x.pipeline.map((p) => `${p.label} ${p.count}`).join(', '))}">${x.pipeline.filter((p) => p.count).map((p) => `<i class="pipe--${p.key}" style="flex:${p.count}"></i>`).join('')}</div>` : '<div class="pipe__bar pipe__bar--empty"></div>'}
+    <div class="pipe__steps">${x.pipeline.map((p) => `<a href="#/my/orders?scope=all&group=${STAGE_LINK[p.key]}" class="pipe__step"><span class="pipe__dot pipe--${p.key}"></span><span><b>${p.count}</b><small>${esc(p.label)}</small></span></a>`).join('')}</div>`;
+}
+const timeLeft = (r) => {
+  if (r.stage === 'booked') return 'Waiting for pickup';
+  const m = r.remaining_min;
+  if (m == null) return r.label;
+  if (m < 1) return 'Arriving now';
+  if (m < 60) return `Arrives in ${m} min`;
+  if (m < 24 * 60) return `Arrives in ${Math.round(m / 60)} h`;
+  return r.promised_by ? `Arrives by ${date(r.promised_by)}` : `Arrives in ${Math.round(m / 1440)} days`;
+};
+function liveCard(x) {
+  return `<div class="card-h"><div><h2>Live deliveries</h2><small>${x.moving ? `${x.moving} on the road · updates every 30 seconds` : 'Shipments on the way show here'}</small></div><a class="link" href="#/my/orders?scope=all&group=transit">View all</a></div>
+    ${x.active.length ? `<ul class="live-list">${x.active.map((r) => `<li>${tile(SECTION_ICON[r.section] || 'parcel', r.stage === 'transit' ? 'green' : r.stage === 'pickup' ? 'amber' : 'blue').value}
+      <div class="live__main"><div class="live__top"><b>${esc(r.title)}</b><span class="badge badge-${r.stage === 'transit' ? 'lime' : r.stage === 'pickup' ? 'amber' : 'blue'}">${esc(r.label)}</span></div>
+        <small class="muted">${esc(r.provider)}${r.driver ? ` · ${esc(r.driver.name)} · ${esc(r.driver.vehicle_no)}` : ''}${r.reference ? ` · ${esc(r.reference)}` : ''}</small>
+        <div class="live__prog"><span class="live__track"><i style="width:${Math.max(4, Math.round(r.progress * 100))}%"></i></span><small>${esc(timeLeft(r))}</small></div>
+        <small class="muted live__route">${esc(r.sub || '')}</small></div>
+      ${r.booking_id ? `<button class="btn btn-outline btn-sm" type="button" data-live-track="${esc(r.id)}">Track</button>` : `<a class="btn btn-outline btn-sm" href="#/my/orders/${esc(r.id)}">View</a>`}</li>`).join('')}</ul>`
+    : `<div class="live__none">${icon('check', 18)}<span class="grow">Nothing on the road right now.</span><a class="btn btn-primary btn-sm" href="#/new-order">Book a delivery</a></div>`}
+    ${(x.delivered || []).length ? `<p class="live__sub">Just delivered</p><ul class="feed live__done">${x.delivered.map((r) => `<li>${tile(SECTION_ICON[r.section] || 'parcel', 'green').value}<div class="feed__t"><b>${esc(r.title)}</b><small>${esc(r.provider)}${r.reference ? ` · ${esc(r.reference)}` : ''} · ${esc(r.sub || '')}</small></div><div class="feed__r"><b translate="no">${esc(money(r.amount))}</b><small>${esc(dateTime(r.at))}</small></div></li>`).join('')}</ul>` : ''}`;
+}
+function storeCard(s) {
+  if (!s.connected) {
+    return `<div class="card-h"><div><h2>Sales channels</h2><small>Amazon, Flipkart, Meesho, Shopify and your own site</small></div></div>
+      <div class="store__cta">${tile('cart', 'green').value}<div class="grow"><b>Connect Amazon, Flipkart, Shopify or your own site</b><small class="muted block">Orders from every channel arrive in All Orders, ready to ship with the best partner.</small></div><a class="btn btn-primary btn-sm" href="#/my/orders?section=website">Connect</a></div>`;
+  }
+  return `<div class="card-h"><div><h2>Sales channels</h2><small><span class="store__dot"></span>${esc(s.name)} · auto-ship ${s.auto_ship ? 'on' : 'off'}</small></div><a class="link" href="#/my/orders?section=website">Open</a></div>
+    <div class="store__stats"><a href="#/my/orders?section=website"><b>${s.pending}</b><small>To ship</small></a><a href="#/my/orders?section=website"><b translate="no">${esc(money(s.cod_value))}</b><small>COD to collect</small></a><a href="#/my/orders?section=website&wtab=all"><b>${s.today}</b><small>Orders today</small></a></div>
+    ${s.pending ? `<button class="btn btn-primary btn-sm store__go" type="button" data-ship-all>${icon('truck', 15)}Ship all ${s.pending} with cheapest partner</button>` : '<p class="muted small notop">All channel orders are shipped.</p>'}`;
+}
+function partnersCard(list, label) {
+  const top = Math.max(1, ...list.map((p) => p.orders));
+  return `<div class="card-h"><div><h2>Top partners</h2><small>Who you ship with most · ${esc(label)}</small></div><a class="link" href="#/intel">Compare</a></div>
+    ${list.length ? `<ol class="partners">${list.map((p, i) => `<li><span class="partners__n">${i + 1}</span><div class="grow"><div class="partners__top"><b>${esc(p.name)}</b><span translate="no">${esc(money(p.spend))}</span></div>
+      <span class="partners__bar"><i style="width:${Math.max(3, Math.round((p.orders / top) * 100))}%"></i></span><small class="muted">${p.orders} ${p.orders === 1 ? 'shipment' : 'shipments'} · avg ${esc(money(p.avg))} · ${p.share}% of spend</small></div></li>`).join('')}</ol>`
+    : '<div class="ov-empty">Partners show here after your first shipment.</div>'}`;
+}
+async function shipAll(done) {
+  try {
+    const w = await api('/hub/website');
+    const ids = w.orders.filter((o) => o.status === 'pending').map((o) => o.id);
+    if (!ids.length) { done(); return; }
+    const r = await withFunds(() => api('/hub/website/ship', { method: 'POST', body: { ids, by: 'cheapest' } }));
+    toast(`${r.shipped} channel ${r.shipped === 1 ? 'order' : 'orders'} booked for ${money(r.amount)}${r.failed.length ? `. ${r.failed.length} not booked: ${r.failed[0].message}` : ''}`, !!r.failed.length);
+    refresh(); done();
+  } catch (x) { if (!x.quiet) toast(x.message, true); }
 }

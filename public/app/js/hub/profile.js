@@ -10,6 +10,7 @@ function downloadJson(name, data) {
 import { duo, tile } from './art.js';
 import { icon } from './icons.js';
 import { mountInstruments } from './instruments.js';
+import { mountFunding, mountTopups } from './wallet-funding.js';
 import { installApp } from './experience.js';
 import { LANGUAGES, getLanguage, getTheme, setTheme, setAccountType, askBusinessDetails, openLanguageMenu, openCurrencyMenu } from './prefs.js';
 
@@ -129,6 +130,24 @@ export async function openNotifications(anchor) {
   el.addEventListener('click', (e) => { if (e.target.closest('a')) el.remove(); });
 }
 
+// ---- Account pages ---------------------------------------------------------------------------
+// "My profile" is an overview; every setting has its own page at #/profile?tab=<key>.
+// [key, icon, title, subtitle, card ids shown on the page, business only]
+const PAGES = [
+  ['details', 'user', 'Your details', 'Name, email, mobile and date of birth', ['details']],
+  ['addresses', 'map', 'Saved addresses', 'Pickup and drop places you use often', ['addresses']],
+  ['payments', 'card', 'Payment methods', 'Default for your wallet, auto top-up, saved methods and receipts', ['funding', 'payments', 'topups']],
+  ['notifications', 'bell', 'Notifications', 'What you hear about, and where', ['notifications']],
+  ['security', 'shield', 'Security', 'Two-step sign-in, password and devices', ['security', 'password', 'devices']],
+  ['safety', 'users', 'Safety', 'Trusted contacts for live trips', ['safety']],
+  ['privacy', 'file', 'Privacy & data', 'Consents, your data and deleting your account', ['data']],
+  ['business', 'building', 'Business details', 'Company, GSTIN, PAN, IEC and business address', ['business'], true],
+  ['format', 'calendar', 'Language and format', 'Language, currency, theme, numbers and dates', ['alerts', 'format']],
+  ['app', 'phone', 'Mobile app', 'Install UT Log on your phone or computer', ['app']],
+];
+const PAGE_ALIAS = { data: 'privacy' };
+const pagesFor = (business) => PAGES.filter((pg) => !pg[5] || business);
+
 // ---- My profile page (CRM card grid) ------------------------------------------------------------
 const save = async (patch) => { const p = await api('/hub/profile', { method: 'POST', body: patch }); store.set({ profile: p, accountType: p.account_type, score: { value: p.score, total: p.score_total } }); return p; };
 const field = (name, label, value, attrs = '') => `<label class="field">${esc(label)}<input class="input" name="${name}" value="${esc(value || '')}" ${attrs}></label>`;
@@ -157,8 +176,7 @@ export async function render(view, { query }) {
   const steps = [['Name', !!p.name], ['Email', !!p.email], ['Mobile', !!p.mobile], ['Address', p.addresses.length > 0], ['Payout account', !!(p.upi || p.bank.account)], business ? ['GSTIN', !!p.gstin] : ['Date of birth', !!p.dob], ['Account type', !!p.account_type]];
   const missing = steps.filter(([, ok]) => !ok).map(([l]) => l);
   const kv = (k, v) => `<div><dt>${esc(k)}</dt><dd>${v ? esc(v) : '<span class="muted">Not added</span>'}</dd></div>`;
-  view.innerHTML = `
-    <div class="page-head"><div><h1>My profile</h1><p>How you appear to providers and your team</p></div><div class="row"><a class="btn btn-outline" href="#/activity">${icon('clock', 16)}Activity log</a><button class="btn btn-outline" id="dl" type="button">${icon('download', 16)}Download my data</button></div></div>
+  const allHtml = `
     <div class="pf-grid">
       <section class="card pf-card pf-id" id="pf-identity">
         <div class="pf-who">${avatar(me.name, 'pf-av--xl')}<div class="grow"><b>${esc(me.name)}</b><small>${esc(me.role)}</small><span class="badge ${business ? 'badge-blue' : 'badge-green'}">${business ? 'Business account' : 'Personal account'}</span></div></div>
@@ -172,6 +190,8 @@ export async function render(view, { query }) {
       ${card('alerts', 'Language and look', 'Applies across the app.', `<div class="pf-list"><button class="acc-row" id="pfLang" type="button"><span class="acc-ico">${icon('globe', 18)}</span><span class="grow"><b>Language</b><small translate="no">${esc((LANGUAGES.find((l) => l[0] === getLanguage()) || LANGUAGES[0])[1])}</small></span>${CHEV}</button><button class="acc-row" id="pfCur" type="button"><span class="acc-ico">${icon('rupee', 18)}</span><span class="grow"><b>Currency</b><small translate="no">${esc(getCurrency())}</small></span>${CHEV}</button><div class="acc-row acc-row--static"><span class="acc-ico">${icon('sun', 18)}</span><span class="grow"><b>Theme</b></span><div class="seg" role="group" aria-label="Theme"><button type="button" data-th="light" aria-pressed="${getTheme() === 'light'}">Light</button><button type="button" data-th="dark" aria-pressed="${getTheme() === 'dark'}">Dark</button></div></div></div>`)}
       ${card('addresses', 'Saved addresses', 'Pick them in one tap when you book.', `${p.addresses.length ? `<ul class="addr">${p.addresses.map((a) => `<li>${tile('pin', 'plain').value}<div class="grow"><b>${esc(a.label)}</b><small class="muted block">${esc(a.line)}, ${esc(a.city)} ${esc(a.pincode)}</small>${a.lat ? `<small class="pf-pinned">${icon('pin', 13)}Pinned on map${a.floor ? ` · ${esc(floorText(a.floor))}` : ''}${a.lift === true ? ' · lift' : a.lift === false ? ' · no lift' : ''}</small>` : ''}</div><button class="btn btn-outline btn-sm" data-rm="${esc(a.id)}" type="button">Remove</button></li>`).join('')}</ul>` : '<p class="muted notop">No saved addresses yet.</p>'}<button class="btn btn-primary btn-sm pf-addmap" type="button" data-addmap>${icon('pin', 16)}Add a place on the map</button><details class="pf-add"><summary>Or type an address</summary><form class="form-grid mt-s" novalidate>${field('label', 'Label', '', 'placeholder="Home, Office, Warehouse"')}${field('city', 'City', '')}<label class="field full">Address<textarea class="input" name="line" rows="2"></textarea></label>${field('pincode', 'Pin code', '', 'inputmode="numeric" maxlength="6"')}${footer('Add address')}</form></details>`)}
       ${card('notifications', 'Notifications', business ? 'For you. Team alerts live in Business notifications.' : 'Choose what you hear about, and where.', `<ul class="toggles">${NOTES.map(([k, t, d]) => `<li><div><b>${esc(t)}</b><small class="muted block">${esc(d)}</small></div><label class="switch"><input type="checkbox" data-n="${k}" ${p.notifications[k] ? 'checked' : ''} aria-label="${esc(t)}"><i></i></label></li>`).join('')}</ul>${business ? '<a class="link" href="#/business/notifications">Business notifications →</a>' : ''}`)}
+      ${card('funding', 'Wallet funding', 'How money gets into your wallet.', '<div id="wfBox"></div>', true)}
+      ${card('topups', 'Top-ups and receipts', 'Every top-up, with a receipt and a monthly statement.', '<div id="tuBox"></div>', true)}
       ${card('payments', 'Payment methods', 'Saved for faster checkout. Cards keep only the last 4 digits.', `<div id="ins"></div><h3 class="pf-sub">Withdrawal account</h3><p class="muted small notop">Money you withdraw from your wallet goes here.</p><form class="form-grid" id="wdF" novalidate>${field('upi', 'UPI ID', p.upi, 'placeholder="name@bank"')}${field('holder', 'Account holder', p.bank.holder)}${field('account', 'Account number', p.bank.account, 'inputmode="numeric"')}${field('ifsc', 'IFSC', p.bank.ifsc, 'maxlength="11" style="text-transform:uppercase"')}${footer()}</form>`, true)}
       ${sec ? card('security', 'Two-step sign-in', sec.has_password ? 'After your password, enter a code sent to your mobile or email.' : 'Built into how you sign in.', sec.has_password ? `<div class="pf-status"><span class="badge ${sec.twofa ? 'badge-green' : ''}">${sec.twofa ? 'On' : 'Off'}</span><span class="grow muted small">${sec.twofa ? 'A code is asked for every email sign-in.' : 'Recommended for business accounts.'}</span><button class="btn ${sec.twofa ? 'btn-outline' : 'btn-primary'}" id="tf" type="button">${sec.twofa ? 'Turn off' : 'Turn on'}</button></div>` : '<p class="notop">You sign in with a one-time code sent to your mobile, so every sign-in is already two-step. Nothing to set up.</p>') : ''}
       ${sec ? card('password', 'Password', sec.has_password ? 'At least 8 characters, with a number.' : 'Not used for your account.', sec.has_password ? `<form class="form-grid" id="pwF" novalidate><label class="field full">Current password<input class="input" type="password" name="current" autocomplete="current-password"></label><label class="field">New password<input class="input" type="password" name="next" autocomplete="new-password"></label><label class="field">Confirm new password<input class="input" type="password" name="again" autocomplete="new-password"></label><p class="form-error full"></p><div class="full"><button class="btn btn-primary" type="submit">Change password</button></div></form>` : `<p class="notop">You sign in with a one-time code to <b>+91 ${esc(String(p.mobile || '').replace(/^(\d{2})\d{4}/, '$1••••'))}</b>. There is no password to remember or leak.</p>`) : ''}
@@ -179,27 +199,50 @@ export async function render(view, { query }) {
       ${card('safety', 'Safety', 'People who get your live trip in one tap.', safetyBody(p))}
       ${card('data', 'Privacy & data', 'What we use, why, and your controls.', privacyBody(p), true)}
     </div>`;
+  const tpl = document.createElement('template'); tpl.innerHTML = allHtml;
+  const pick = (id) => { const n = tpl.content.querySelector(`#pf-${id}`); return n ? n.outerHTML : ''; };
+  const raw = query.get('tab');
+  const key = PAGE_ALIAS[raw] || raw;
+  const list = pagesFor(business);
+  const page = list.find((pg) => pg[0] === key);
+  const nav = `<nav class="pfs-nav" aria-label="Account settings"><a href="#/profile" class="${page ? '' : 'on'}">${icon('user', 17)}<span>Overview</span></a>${list.filter((pg) => pg[0] !== 'details').map(([k, ic, t]) => `<a href="#/profile?tab=${k}" class="${page && page[0] === k ? 'on' : ''}" ${page && page[0] === k ? 'aria-current="page"' : ''}>${icon(ic, 17)}<span>${esc(t)}</span></a>`).join('')}<a href="#/activity">${icon('clock', 17)}<span>Activity log</span></a></nav>`;
+  if (page) {
+    const [, ic, title, sub, ids] = page;
+    view.innerHTML = `<div class="pfs">${nav}<div class="pfs-main">
+      <a class="pfs-back" href="#/profile">${icon('chevron', 15).replace('class="li"', 'class="li pfs-flip"')}My profile</a>
+      <div class="pfs-head"><span class="pfs-ico">${icon(ic, 22)}</span><div><h1>${esc(title)}</h1><p>${esc(sub)}</p></div></div>
+      <div class="pfs-body">${ids.map(pick).join('')}</div></div></div>`;
+  } else {
+    view.innerHTML = `<div class="pfs">${nav}<div class="pfs-main">
+      <div class="page-head"><div><h1>My profile</h1><p>How you appear to providers and your team</p></div><div class="row"><a class="btn btn-outline" href="#/activity">${icon('clock', 16)}Activity log</a><button class="btn btn-outline" id="dl" type="button">${icon('download', 16)}Download my data</button></div></div>
+      <div class="pfs-over">${pick('identity')}${pick('details')}</div>
+      <h2 class="pfs-h2">Settings</h2>
+      <div class="pfs-tiles">${list.filter((pg) => pg[0] !== 'details').map(([k, ic, t, sb]) => `<a class="pfs-tile" href="#/profile?tab=${k}"><span class="pfs-ico">${icon(ic, 20)}</span><span class="grow"><b>${esc(t)}</b><small>${esc(sb)}</small></span>${CHEV}</a>`).join('')}</div></div></div>`;
+  }
+  window.scrollTo(0, 0);
   // Forms
   const sectionOf = (id) => view.querySelector(`#pf-${id}`);
-  formSave(sectionOf('details'), (d) => d, again);
-  if (business) formSave(sectionOf('business'), ({ ba_line, ba_city, ba_pincode, ...d }) => ({ ...d, business_address: { line: ba_line, city: ba_city, pincode: ba_pincode } }), again);
-  formSave(sectionOf('addresses'), (d) => ({ add_address: d }), again, 'Address added');
-  formSave(sectionOf('payments').querySelector('#wdF').parentElement, (d) => ({ upi: d.upi, bank: { holder: d.holder, account: d.account, ifsc: d.ifsc } }), again);
-  mountInstruments(view.querySelector('#ins'));
-  sectionOf('addresses').addEventListener('click', async (e) => { if (e.target.closest('[data-addmap]')) { const pl = await openPlacePicker({ kind: 'place', saveDefault: true }); if (pl) again(); return; } const b = e.target.closest('[data-rm]'); if (b) { await save({ remove_address: b.dataset.rm }); toast('Address removed'); again(); } });
-  sectionOf('notifications').addEventListener('change', async (e) => { const k = e.target.dataset.n; if (k) { await save({ notifications: { [k]: e.target.checked } }); toast('Saved'); } });
+  const on = (id, fn) => { const el = sectionOf(id); if (el) fn(el); };
+  on('details', (el) => formSave(el, (d) => d, again));
+  if (business) on('business', (el) => formSave(el, ({ ba_line, ba_city, ba_pincode, ...d }) => ({ ...d, business_address: { line: ba_line, city: ba_city, pincode: ba_pincode } }), again));
+  on('addresses', (el) => formSave(el, (d) => ({ add_address: d }), again, 'Address added'));
+  on('payments', (el) => { formSave(el.querySelector('#wdF').parentElement, (d) => ({ upi: d.upi, bank: { holder: d.holder, account: d.account, ifsc: d.ifsc } }), again); mountInstruments(view.querySelector('#ins'), () => { const b = view.querySelector('#wfBox'); if (b) mountFunding(b); }); });
+  on('funding', () => mountFunding(view.querySelector('#wfBox'), () => { const t = view.querySelector('#tuBox'); if (t) mountTopups(t); }));
+  on('topups', () => mountTopups(view.querySelector('#tuBox')));
+  if (sectionOf('addresses')) sectionOf('addresses').addEventListener('click', async (e) => { if (e.target.closest('[data-addmap]')) { const pl = await openPlacePicker({ kind: 'place', saveDefault: true }); if (pl) again(); return; } const b = e.target.closest('[data-rm]'); if (b) { await save({ remove_address: b.dataset.rm }); toast('Address removed'); again(); } });
+  if (sectionOf('notifications')) sectionOf('notifications').addEventListener('change', async (e) => { const k = e.target.dataset.n; if (k) { await save({ notifications: { [k]: e.target.checked } }); toast('Saved'); } });
   // Format
-  view.querySelector('#fmtF').addEventListener('change', (e) => {
+  if (view.querySelector('#fmtF')) view.querySelector('#fmtF').addEventListener('change', (e) => {
     const map = { loc: 'ut-date-locale', clock: 'ut-clock', week: 'ut-week-start' };
     try { localStorage.setItem(map[e.target.name], e.target.value); } catch (x) {}
     view.querySelector('#fmtEx').textContent = `Looks like: ${dateTime(new Date().toISOString())}`;
     toast('Format saved');
   });
   // Language, currency, theme
-  view.querySelector('#pfLang').addEventListener('click', (e) => openLanguageMenu(e.currentTarget));
-  view.querySelector('#pfCur').addEventListener('click', (e) => openCurrencyMenu(e.currentTarget));
-  sectionOf('alerts').addEventListener('click', (e) => { const t = e.target.closest('[data-th]'); if (t) { setTheme(t.dataset.th); sectionOf('alerts').querySelectorAll('[data-th]').forEach((b) => b.setAttribute('aria-pressed', String(b === t))); } });
-  view.querySelector('#inst').addEventListener('click', installApp);
+  if (view.querySelector('#pfLang')) view.querySelector('#pfLang').addEventListener('click', (e) => openLanguageMenu(e.currentTarget));
+  if (view.querySelector('#pfCur')) view.querySelector('#pfCur').addEventListener('click', (e) => openCurrencyMenu(e.currentTarget));
+  if (sectionOf('alerts')) sectionOf('alerts').addEventListener('click', (e) => { const t = e.target.closest('[data-th]'); if (t) { setTheme(t.dataset.th); sectionOf('alerts').querySelectorAll('[data-th]').forEach((b) => b.setAttribute('aria-pressed', String(b === t))); } });
+  if (view.querySelector('#inst')) view.querySelector('#inst').addEventListener('click', installApp);
   // Security
   const tf = view.querySelector('#tf');
   if (tf) tf.addEventListener('click', () => (sec.twofa ? turnOff2fa(again) : turnOn2fa(again)));
@@ -213,34 +256,29 @@ export async function render(view, { query }) {
   if (rv) rv.addEventListener('click', async () => { const r = await api('/security/sessions/revoke-others', { method: 'POST', body: {} }); toast(`Signed out ${r.revoked || 'other'} ${r.revoked === 1 ? 'device' : 'devices'}`); again(); });
   // Data
   const dl = () => downloadMyData(p);
-  view.querySelector('#dl').addEventListener('click', dl);
-  view.querySelector('#dl2').addEventListener('click', dl);
-  view.querySelector('#lo').addEventListener('click', logout);
+  ['#dl', '#dl2'].forEach((sel) => { const b = view.querySelector(sel); if (b) b.addEventListener('click', dl); });
+  if (view.querySelector('#lo')) view.querySelector('#lo').addEventListener('click', logout);
   // Safety: trusted contacts (up to 3).
   const sf = sectionOf('safety');
-  sf.addEventListener('click', async (e) => {
+  if (sf) sf.addEventListener('click', async (e) => {
     const rm = e.target.closest('[data-rm-tc]');
     if (rm) { const list = (p.trusted || []).filter((_, i) => String(i) !== rm.dataset.rmTc); try { await save({ trusted: list }); toast('Contact removed'); again(); } catch (x) { toast(x.message, true); } }
   });
-  const tcF = sf.querySelector('form');
+  const tcF = sf && sf.querySelector('form');
   if (tcF) tcF.addEventListener('submit', async (e) => {
     e.preventDefault(); const d = formData(tcF); const err = tcF.querySelector('.form-error'); err.textContent = '';
     await withBusy(tcF.querySelector('[type=submit]'), async () => { try { await save({ trusted: [...(p.trusted || []), { name: d.tc_name, phone: d.tc_phone, relation: d.tc_rel }] }); toast('Trusted contact added'); again(); } catch (x) { err.textContent = x.message; } });
   });
   // Privacy: each switch is saved at once and logged with its time.
   const pv = sectionOf('data');
-  pv.addEventListener('change', async (e) => {
+  if (pv) pv.addEventListener('change', async (e) => {
     const k = e.target.dataset.consent; if (!k) return;
     try { await save({ consents: { [k]: e.target.checked } }); toast(e.target.checked ? 'Consent given' : 'Consent withdrawn'); again(); } catch (x) { e.target.checked = !e.target.checked; toast(x.message, true); }
   });
-  pv.addEventListener('click', async (e) => {
+  if (pv) pv.addEventListener('click', async (e) => {
     if (e.target.closest('#delAcc')) deleteAccount(again);
     if (e.target.closest('#undoDel')) { await api('/hub/account/delete/cancel', { method: 'POST', body: {} }); toast('Deletion cancelled. Your account stays.'); again(); }
   });
-  // Deep links from the account panel: scroll to the section and highlight it.
-  const tab = query.get('tab');
-  const target = tab && sectionOf({ details: 'details', business: 'business', addresses: 'addresses', payments: 'payments', notifications: 'notifications', security: 'security', format: 'format', app: 'app', safety: 'safety', privacy: 'data', data: 'data' }[tab] || tab);
-  if (target) { setTimeout(() => { target.scrollIntoView({ block: 'start', behavior: 'smooth' }); target.classList.add('pf-flash'); setTimeout(() => target.classList.remove('pf-flash'), 1600); }, 80); }
 }
 
 function turnOn2fa(done) {

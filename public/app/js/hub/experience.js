@@ -47,7 +47,7 @@ export function startTour() {
 export const maybeTour = () => { if (read('ut-tour', '') !== 'done' && location.hash.startsWith('#/home')) setTimeout(startTour, 900); };
 
 // ---- dashboard widgets ------------------------------------------------------------------
-const WIDGETS = [['ask', 'Quick booking bar'], ['kpi', 'Key numbers'], ['insights', 'What the numbers say'], ['attention', 'Needs attention'], ['todo', 'What to do first'], ['services', 'Book or pay'], ['charts', 'Daily spend'], ['mix', 'Spend by service'], ['recent', 'Recent activity'], ['upcoming', 'Coming up']];
+const WIDGETS = [['ask', 'AI assistant and quick actions'], ['kpi', 'Key numbers'], ['pipeline', 'Shipment pipeline'], ['live', 'Live deliveries'], ['store', 'Website store'], ['partners', 'Top partners'], ['insights', 'What the numbers say'], ['attention', 'Needs attention'], ['todo', 'What to do first'],['charts', 'Daily spend'], ['mix', 'Spend by service'], ['recent', 'Recent activity'], ['upcoming', 'Coming up']];
 const hidden = () => read('ut-widgets', []);
 export function applyWidgets(view) { const h = hidden(); view.querySelectorAll('[data-w]').forEach((el) => { el.hidden = h.includes(el.dataset.w); }); }
 export function customise(view) {

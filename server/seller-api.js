@@ -31,7 +31,8 @@ const INTL_COURIERS = [
   { id: 16, name: 'UPS Worldwide', base: 960, perHalf: 270, days: 4 },
   { id: 17, name: 'Aramex', base: 700, perHalf: 220, days: 6 },
 ];
-const COUNTRIES = { 'United States': 1.4, 'United Kingdom': 1.3, 'United Arab Emirates': 1.0, Singapore: 1.0, Australia: 1.5, Canada: 1.45, Germany: 1.35 };
+// All 194 destination countries (195 minus India), with a demo rate multiplier by region.
+const COUNTRIES = require('./countries').rateOf;
 const CITIES = [
   ['Bengaluru', 'KA', '560034'], ['Mumbai', 'MH', '400053'], ['New Delhi', 'DL', '110017'], ['Hyderabad', 'TS', '500081'],
   ['Pune', 'MH', '411014'], ['Chennai', 'TN', '600040'], ['Kolkata', 'WB', '700091'], ['Jaipur', 'RJ', '302017'],

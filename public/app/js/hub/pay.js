@@ -1,15 +1,20 @@
 // Mobile recharge, FASTag, business payments and auto-pay. Bills and Send Money are in bills.js.
 import { api, esc, money, store, toast, modal, withBusy, dateTime, formData, inrHint, date } from '../core.js';
 import { tile } from './art.js';
+import { icon } from './icons.js';
 import { deskTabs } from './desk.js';
-import { payMethods, checkout, PAY_LABEL } from './checkout.js';
+import { payMethods, PAY_LABEL } from './checkout.js';
+import { walletCheckout } from './wallet-checkout.js';
+import { svcHero, BADGES } from './svc-hero.js';
 import { emptyScene, statusPill, withFunds, refresh, filterBtn, openFilters, countActive } from './ui.js';
 
 let catalog = null;
 export const getCatalog = async () => { if (!catalog) catalog = await api('/hub/catalog'); return catalog; };
-export const head = (icon, tone, title, intro) => `<div class="page-head"><div class="row head-t">${tile(icon, tone).value}<div><h1>${esc(title)}</h1><p>${esc(intro)}</p></div></div></div>`;
+// Every payment page opens with the shared Travel & Bills header (back button, animated icon, promises).
+export const head = (icon, tone, title, intro, opts = {}) => svcHero({ icon, tone, title, intro, badges: /Send Money|Gold|Voucher|Business/.test(title) ? BADGES.money : BADGES.pay, ...opts });
 const canSee = (m) => { const p = store.state.user && store.state.user.permissions; return !p || (p[m] || 'none') !== 'none'; };
-export const payTabs = (a) => `${canSee('recharge') ? deskTabs('pay', 'book') : ''}<nav class="tabs tabs--sub">${[['mobile', 'Mobile recharge', '#/pay/mobile', 'recharge'], ['fastag', 'FASTag', '#/pay/fastag', 'recharge'], ['bills', 'Bills & more', '#/pay/bills', 'recharge'], ['send', 'Send money', '#/pay/send', 'recharge'], ['autopay', 'Auto-pay', '#/autopay', 'autopay'], ...(store.state.accountType === 'business' ? [['business', 'Business payments', '#/pay/business', 'bizpay']] : [])].filter((t) => canSee(t[3])).map(([k, l, h]) => `<a href="${h}" class="${k === a ? 'active' : ''}">${l}</a>`).join('')}</nav>`;
+// Each payment page shows only itself; Travel & Bills is where you pick another one.
+export const payTabs = () => '';
 export const options = (list, value) => list.map((o) => `<option ${o === value ? 'selected' : ''}>${esc(o)}</option>`).join('');
 
 export async function historyCard(el, section, kindFilter) {
@@ -25,51 +30,104 @@ export async function historyCard(el, section, kindFilter) {
   };
   draw();
 }
-export async function pay(btn, errEl, run, done, root) {
+// Every recharge and bill pays the same way: check the details (so nobody pays for something that
+// would be rejected), then the wallet checkout: review, PIN, receipt. info describes the payee.
+export async function pay(btn, errEl, run, done, root, info) {
   errEl.textContent = '';
+  let check;
   await withBusy(btn, async () => {
-    try {
-      // Check the details first, so nobody pays for something that would be rejected.
-      const check = await run({ dry_run: true });
-      const extra = await checkout(root, check.amount);
-      if (!extra) return;
-      const r = await withFunds(() => run(extra));
-      refresh(); done(r);
-    } catch (e) { if (!e.quiet) errEl.textContent = e.message; }
+    try { check = await run({ dry_run: true }); } catch (e) { if (!e.quiet) errEl.textContent = e.message; }
   });
+  if (!check) return;
+  const meta = typeof info === 'function' ? info(check) : info || {};
+  const r = await walletCheckout({ amount: check.amount, info: { fee: check.fee || 0, ...meta }, run });
+  if (!r) return;
+  refresh(); done(r);
 }
 
 // ---- mobile -----------------------------------------------------------------------
 export async function renderMobile(view, { query }) {
   const c = await getCatalog();
-  view.innerHTML = `${head('phone', 'green', 'Mobile Recharge', 'Prepaid plans for every operator.')}${payTabs('mobile')}
-    <div class="dash dash--even"><section class="card"><form id="mf" class="form-grid" novalidate>
-      <label class="field full">Mobile number<input class="input input--lg" name="number" inputmode="numeric" maxlength="10" placeholder="10-digit number" value="${esc(query.get('number') || '')}"></label>
-      <label class="field">Operator<select class="select" name="operator">${options(c.operators)}</select></label><label class="field">Circle<select class="select" name="circle">${options(c.circles)}</select></label></form>
-      <div class="section-head mt"><h2 class="notop">Choose a plan</h2><span id="plF"></span></div><div id="plans" class="plans"></div>
-      <label class="row mt"><input type="checkbox" class="check" id="auto"> Recharge this number automatically when the plan ends</label>
-      <div class="mt">${payMethods()}</div><p class="form-error" id="err"></p><button class="btn btn-primary btn-block mt" id="go" disabled>Select a plan</button></section>
-      <aside class="dash__side"><section class="card" id="hist"></section></aside></div>`;
-  const form = view.querySelector('#mf'); const go = view.querySelector('#go'); const plansEl = view.querySelector('#plans');
-  let plans = []; let chosen = null; const planF = { kind: '' };
-  async function load() {
-    const r = await api('/hub/plans', { query: { operator: form.operator.value } });
-    plans = r.plans; chosen = null; draw();
+  const OPC = { Jio: 'jio', Airtel: 'airtel', Vi: 'vi', BSNL: 'bsnl' };
+  const opBadge = (op, big) => `<span class="op op--${OPC[op] || 'x'} ${big ? 'op--lg' : ''}" aria-hidden="true">${esc(op === 'Airtel' ? 'a' : op === 'BSNL' ? 'B' : op === 'Vi' ? 'Vi' : 'J')}</span>`;
+  view.innerHTML = `${head('phone', 'green', 'Mobile Recharge', 'Prepaid plans for every operator, paid from your wallet.')}
+    <div class="dash dash--even rc"><section class="card rc-main">
+      <div class="rc-num"><label class="rc-num__f">${icon('phone', 20)}<span class="rc-num__cc">+91</span><input id="num" inputmode="numeric" maxlength="10" placeholder="Enter mobile number" autocomplete="tel-national" value="${esc(query.get('number') || '')}" aria-label="Mobile number"></label><span class="rc-num__hint" id="nh">We detect the operator and circle for you</span></div>
+      <div id="recent" class="rc-recent"></div>
+      <div id="who" class="rc-who" hidden></div>
+      <div id="pick" class="rc-pick" hidden><label class="field">Operator<select class="select" id="op">${options(c.operators)}</select></label><label class="field">Circle<select class="select" id="ci">${options(c.circles)}</select></label></div>
+      <div id="planBox" class="rc-plans" hidden>
+        <div class="rc-plans__h"><h2 class="notop">Choose a plan</h2><label class="rc-find">${icon('search', 15)}<input id="pq" placeholder="Search ₹, GB or days" aria-label="Search plans"></label></div>
+        <nav class="rc-tabs" id="tabs" role="tablist"></nav>
+        <div id="plans" class="rc-grid"></div>
+        <label class="row mt rc-auto"><input type="checkbox" class="check" id="auto"> Recharge this number automatically when the plan ends</label>
+        <div class="mt">${payMethods()}</div>
+      </div>
+      <div id="empty" class="rc-empty">${tile('phone', 'green').value}<b>Enter a mobile number to see plans</b><small>Jio, Airtel, Vi and BSNL prepaid. Plans update for your circle.</small></div>
+      <p class="form-error" id="err"></p>
+    </section><aside class="dash__side"><section class="card" id="hist"></section></aside></div>
+    <div class="rc-bar" id="bar" hidden><div class="grow"><b translate="no" id="barP"></b><small id="barD"></small></div><button class="btn btn-primary" id="go" type="button">${icon('shield', 16)}Proceed to pay</button></div>`;
+  const $ = (s) => view.querySelector(s);
+  const num = $('#num'); const opSel = $('#op'); const ciSel = $('#ci');
+  let plans = []; let cats = []; let chosen = null; let tab = 'popular'; let info = null;
+
+  // Numbers you recharged before, one tap to fill.
+  api('/hub/orders', { query: { section: 'recharge', per_page: 50 } }).then((r) => {
+    const seen = []; r.data.filter((x) => x.kind === 'mobile' && /^\d{10}$/.test(x.sub || '')).forEach((x) => { if (!seen.find((s) => s.sub === x.sub)) seen.push(x); });
+    $('#recent').innerHTML = seen.length ? `<span class="muted small">Recent</span>${seen.slice(0, 4).map((x) => `<button type="button" data-n="${esc(x.sub)}">${opBadge(x.provider)}${esc(x.sub.slice(0, 5))} ${esc(x.sub.slice(5))}</button>`).join('')}` : '';
+  }).catch(() => {});
+
+  async function loadPlans() {
+    const r = await api('/hub/plans', { query: { operator: opSel.value } });
+    plans = r.plans; cats = r.categories; chosen = null; draw();
+  }
+  function who() {
+    const cur = info && info.current;
+    $('#who').hidden = !info;
+    if (!info) return;
+    $('#who').innerHTML = `${opBadge(opSel.value, true)}<div class="grow"><b>${esc(opSel.value)} Prepaid · ${esc(ciSel.value)}</b><small>${cur && cur.plan ? `Current plan ${esc(cur.plan)} · ${cur.days_left > 0 ? `ends ${esc(date(cur.ends))} (${cur.days_left} ${cur.days_left === 1 ? 'day' : 'days'} left)` : 'expired'}` : '<span class="rc-exp">No active plan. Recharge to keep calls and data working.</span>'}</small></div><button class="link" type="button" id="chg">Change</button>`;
+  }
+  async function lookup() {
+    const n = num.value.replace(/\D/g, '');
+    $('#err').textContent = '';
+    if (n.length !== 10) { info = null; $('#planBox').hidden = true; $('#empty').hidden = false; $('#bar').hidden = true; $('#nh').textContent = 'We detect the operator and circle for you'; who(); return; }
+    $('#nh').innerHTML = '<span class="spinner spinner--sm"></span>Detecting operator…';
+    try {
+      info = await api('/hub/recharge/lookup', { method: 'POST', body: { number: n } });
+      opSel.value = info.operator; ciSel.value = info.circle;
+      $('#nh').innerHTML = `${icon('check', 14)}Detected ${esc(info.operator)} · ${esc(info.circle)}`;
+      $('#planBox').hidden = false; $('#empty').hidden = true;
+      who(); await loadPlans();
+    } catch (x) { $('#nh').textContent = ''; $('#err').textContent = x.message; }
   }
   function draw() {
-    const PF = [{ key: 'kind', label: 'Plan type', options: [['', 'All plans'], ['long', '84 days or more'], ['data', 'Data packs'], ['roaming', 'Roaming']] }];
-    view.querySelector('#plF').innerHTML = filterBtn(countActive(PF, planF), 'pfB');
-    view.querySelector('#pfB').onclick = (e) => openFilters(e.currentTarget, PF, planF, (v) => { planF.kind = v.kind; draw(); });
-    const shownPlans = plans.filter((p) => (planF.kind === 'long' ? parseInt(p.validity, 10) >= 84 : planF.kind === 'data' ? p.tag === 'Data pack' : planF.kind === 'roaming' ? p.tag === 'Roaming' : true));
-    plansEl.innerHTML = shownPlans.map((p) => `<button type="button" class="plan" data-p="${p.id}" aria-pressed="${p.id === chosen}"><b translate="no">${esc(money(p.price))}</b><span>${esc(p.data)}</span><small>${esc(p.validity)}</small>${p.tag ? `<em>${esc(p.tag)}</em>` : ''}</button>`).join('');
+    const q = $('#pq').value.trim().toLowerCase().replace('₹', '');
+    const pool = q ? plans.filter((p) => `${p.price} ${p.data} ${p.validity} ${p.extras}`.toLowerCase().includes(q)) : plans.filter((p) => p.category === tab);
+    $('#tabs').innerHTML = cats.map(([k, l]) => `<button type="button" role="tab" data-t="${k}" aria-selected="${!q && k === tab}">${esc(l)}<i>${plans.filter((p) => p.category === k).length}</i></button>`).join('');
+    $('#plans').innerHTML = pool.length ? pool.map((p, i) => `<button type="button" class="rc-plan" style="--i:${i}" data-p="${p.id}" aria-pressed="${p.id === chosen}">${p.tag ? `<em>${esc(p.tag)}</em>` : ''}<b translate="no">${esc(money(p.price))}</b>
+        <span class="rc-plan__m"><span><small>Data</small>${esc(p.data)}</span><span><small>Validity</small>${esc(p.validity)}</span></span><small class="rc-plan__x">${esc(p.extras || '')}</small><span class="rc-plan__pick">${p.id === chosen ? `${icon('check', 14)}Selected` : 'Select'}</span></button>`).join('') : '<p class="muted">No plan matches that. Try another amount.</p>';
     const p = plans.find((x) => x.id === chosen);
-    go.disabled = !p; go.textContent = p ? `Pay ${money(p.price)}` : 'Select a plan';
+    $('#bar').hidden = !p;
+    if (p) { $('#barP').textContent = money(p.price); $('#barD').textContent = `${opSel.value} · ${p.data} · ${p.validity}`; }
   }
-  form.operator.addEventListener('change', load);
-  plansEl.addEventListener('click', (e) => { const b = e.target.closest('[data-p]'); if (b) { chosen = b.dataset.p; draw(); } });
-  const hist = () => historyCard(view.querySelector('#hist'), 'recharge', (x) => /Mobile/.test(x.title));
-  go.addEventListener('click', () => pay(go, view.querySelector('#err'), (x) => api('/hub/recharge/mobile', { method: 'POST', body: { number: form.number.value, operator: form.operator.value, plan_id: chosen, auto: view.querySelector('#auto').checked, ...x } }), (r) => { toast(`Recharge successful · ${r.id}`); form.number.value = ''; chosen = null; draw(); hist(); }, view));
-  await load(); hist();
+  num.addEventListener('input', () => { num.value = num.value.replace(/\D/g, '').slice(0, 10); if (num.value.length === 10 || info) lookup(); });
+  $('#recent').addEventListener('click', (e) => { const b = e.target.closest('[data-n]'); if (b) { num.value = b.dataset.n; lookup(); } });
+  $('#who').addEventListener('click', (e) => { if (e.target.closest('#chg')) $('#pick').hidden = !$('#pick').hidden; });
+  opSel.addEventListener('change', () => { who(); loadPlans(); });
+  ciSel.addEventListener('change', who);
+  $('#tabs').addEventListener('click', (e) => { const b = e.target.closest('[data-t]'); if (b) { tab = b.dataset.t; $('#pq').value = ''; draw(); } });
+  $('#pq').addEventListener('input', draw);
+  $('#plans').addEventListener('click', (e) => { const b = e.target.closest('[data-p]'); if (b) { chosen = b.dataset.p; draw(); } });
+  const hist = () => historyCard($('#hist'), 'recharge', (x) => /Mobile/.test(x.title));
+  $('#go').addEventListener('click', () => {
+    const p = plans.find((x) => x.id === chosen);
+    const n = num.value;
+    pay($('#go'), $('#err'), (x) => api('/hub/recharge/mobile', { method: 'POST', body: { number: n, operator: opSel.value, plan_id: chosen, auto: $('#auto').checked, ...x } }),
+      () => { chosen = null; draw(); lookup(); hist(); }, view,
+      { title: 'Mobile recharge', payee: `${opSel.value} Prepaid`, sub: `+91 ${n.slice(0, 5)} ${n.slice(5)} · ${ciSel.value}`, icon: 'phone', tone: 'green', baseLabel: 'Plan amount', rows: [['Plan', `${p.data} · ${p.validity}`], ['Benefits', p.extras || '—']], refLabel: 'Operator reference' });
+  });
+  if (num.value.length === 10) await lookup();
+  hist();
 }
 
 // ---- FASTag -----------------------------------------------------------------------
@@ -98,7 +156,7 @@ export async function renderFastag(view) {
     catch (e) { err.textContent = e.message; }
   });
   const go = view.querySelector('#go');
-  go.addEventListener('click', () => { const d = formData(form); delete d.pm; pay(go, err, (x) => api('/hub/recharge/fastag', { method: 'POST', body: { ...d, auto: !!d.auto, ...x } }), (r) => { toast(`FASTag recharged · new balance ${money(r.balance)}`); view.querySelector('#bal').innerHTML = ''; hist(); }, view); });
+  go.addEventListener('click', () => { const d = formData(form); delete d.pm; pay(go, err, (x) => api('/hub/recharge/fastag', { method: 'POST', body: { ...d, auto: !!d.auto, ...x } }), (r) => { toast(`FASTag recharged · new balance ${money(r.balance)}`); view.querySelector('#bal').innerHTML = ''; hist(); }, view, { title: 'FASTag recharge', payee: `${d.issuer} FASTag`, sub: String(d.vehicle_no || '').toUpperCase(), icon: 'fastag', tone: 'coral', baseLabel: 'Recharge amount', refLabel: 'NETC reference' }); });
   hist();
 }
 
@@ -118,14 +176,14 @@ export async function renderBusiness(view, { query }) {
   const form = view.querySelector('#pf'); const go = view.querySelector('#go');
   form.amount.addEventListener('input', () => { view.querySelector('#fx').textContent = inrHint(form.amount.value); });
   const hist = () => historyCard(view.querySelector('#hist'), 'business');
-  go.addEventListener('click', () => pay(go, view.querySelector('#err'), (x) => { const d = formData(form); delete d.pm; return api('/hub/business/pay', { method: 'POST', body: { type, ...d, ...x } }); }, (r) => { toast(`Payment done · ${r.id}`); form.reset(); hist(); }, view));
+  go.addEventListener('click', () => pay(go, view.querySelector('#err'), (x) => { const d = formData(form); delete d.pm; return api('/hub/business/pay', { method: 'POST', body: { type, ...d, ...x } }); }, (r) => { form.reset(); hist(); }, view, () => { const d = formData(form); return { title: 'Business payment', payee: d.payee || 'Payee', sub: d.reference ? `Ref ${d.reference}` : '', icon: 'briefcase', tone: 'green' }; }));
   hist();
 }
 
 // ---- auto-pay ---------------------------------------------------------------------------
 const ACCOUNT = { fastag: ['fastag', 'coral', 'FASTag'], mobile: ['phone', 'green', 'Mobile'], bill: ['bill', 'blue', 'Bill'], transfer: ['rupee', 'violet', 'Regular payment'] };
 export async function renderAutopay(view) {
-  view.innerHTML = `<div class="page-head"><div class="row head-t">${tile('repeat', 'violet').value}<div><h1>Auto-pay</h1><p>Connect accounts once. They recharge from your wallet by themselves.</p></div></div><button class="btn btn-primary" id="add">+ Connect account</button></div>${payTabs('autopay')}<div id="body"><div class="skeleton" style="height:220px"></div></div>`;
+  view.innerHTML = `${head('repeat', 'violet', 'Auto-pay', 'Connect accounts once. They recharge from your wallet by themselves.', { badges: ['Never miss a due date', 'Stops if the wallet is low', 'Pause any time'], action: '<button class="btn btn-primary" id="add">+ Connect account</button>' })}${payTabs('autopay')}<div id="body"><div class="skeleton" style="height:220px"></div></div>`;
   const body = view.querySelector('#body');
   const af = { type: '' };
   const AF = [{ key: 'type', label: 'Account type', options: [['', 'All'], ['fastag', 'FASTag'], ['mobile', 'Mobile'], ['bill', 'Bill']] }];

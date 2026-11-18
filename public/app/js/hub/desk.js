@@ -6,6 +6,7 @@ import { orderTable, ORDER_BULK, wireOrders, csvRows, renderReturns, cancelOne }
 import { analyticsTab, towerTab, settingsTab } from './desk-more.js';
 import { tableTools, wireTableTools } from './tabletools.js';
 import { dateRangeField, mountDateRange, fromQuery, toQuery, toApi } from './daterange.js';
+import { svcHero } from './svc-hero.js';
 
 const shipping = (scheduled, assigned) => [['all', 'All'], ['new', 'New'], ['scheduled', scheduled], ['assigned', assigned], ['transit', 'In Transit'], ['delivered', 'Delivered'], ['lost', 'Lost/Damaged']];
 const trip = (upcoming, done) => [['all', 'All'], ['new', upcoming], ['delivered', done]];
@@ -23,13 +24,13 @@ const SUBS = {
 };
 export const subPills = (c, sub, href) => (c.subs ? `<nav class="tabs tabs--sub" aria-label="Sub-services">${[['', 'All'], ...c.subs].map(([k, l]) => `<a href="${href(k)}" class="${k === sub ? 'active' : ''}">${esc(l)}</a>`).join('')}</nav>` : '');
 export const DESKS = {
-  vehicle: { noun: 'vehicle', title: 'Vehicle Transport', icon: 'bike', tone: 'green', dash: '#/vehicle', base: '#/vehicle', book: '#/vehicle/book', bookLabel: 'New booking', stages: shipping('Rider Scheduled', 'Rider Assigned'), returns: true, cancels: true },
-  courier: { noun: 'courier', title: 'Courier Transport', icon: 'parcel', tone: 'amber', dash: '#/courier', base: '#/courier', book: '#/courier/book', bookLabel: 'New shipment', stages: shipping('Pickup Scheduled', 'Courier Assigned'), returns: true, cancels: true, extra: [['bulk', 'Bulk booking', '#/courier/bulk']] },
-  logistics: { noun: 'logistics', title: 'Logistics Transport', icon: 'truck', tone: 'blue', dash: '#/logistics', base: '#/logistics', book: '#/logistics/book', bookLabel: 'New load', stages: shipping('Load Scheduled', 'Truck Assigned'), returns: true, cancels: true },
+  vehicle: { noun: 'vehicle', title: 'Vehicle Transport', icon: 'bike', tone: 'green', dash: '#/vehicle', base: '#/vehicle', book: '#/new-order?type=vehicle', bookLabel: 'New booking', stages: shipping('Rider Scheduled', 'Rider Assigned'), returns: true, cancels: true },
+  courier: { noun: 'courier', title: 'Courier Transport', icon: 'parcel', tone: 'amber', dash: '#/courier', base: '#/courier', book: '#/new-order?type=courier', bookLabel: 'New shipment', stages: shipping('Pickup Scheduled', 'Courier Assigned'), returns: true, cancels: true, extra: [['bulk', 'Bulk booking', '#/courier/bulk']] },
+  logistics: { noun: 'logistics', title: 'Logistics Transport', icon: 'truck', tone: 'blue', dash: '#/logistics', base: '#/logistics', book: '#/new-order?type=logistics', bookLabel: 'New load', stages: shipping('Load Scheduled', 'Truck Assigned'), returns: true, cancels: true },
   international: { noun: 'international', title: 'International', icon: 'globe', tone: 'violet', dash: '#/international', base: '#/international', book: '#/international/book', bookLabel: 'New shipment', stages: shipping('Pickup Scheduled', 'Carrier Assigned'), returns: true, cancels: true },
   services: { noun: 'service', title: 'More Services', icon: 'building', tone: 'violet', intro: 'Movers, warehousing, cold chain, customs, rental and packaging.', dash: '#/services/dashboard', base: '#/services', book: '#/services/movers', bookLabel: 'Book a service', stages: [['all', 'All'], ['new', 'Requested'], ['scheduled', 'Scheduled'], ['assigned', 'Assigned'], ['transit', 'In Progress'], ['delivered', 'Completed']], returns: true, cancels: true },
   travel: { noun: 'travel', title: 'Travel & Stay', icon: 'plane', tone: 'blue', intro: 'Flights, trains, buses, hotels, stays and local rides.', dash: '#/travel/dashboard', base: '#/travel', book: '#/travel/flights', bookLabel: 'Book', stages: [['all', 'All'], ['new', 'Confirmed'], ['paylater', 'Pay Later'], ['assigned', 'Driver Assigned'], ['transit', 'In Progress'], ['delivered', 'Completed']], returns: false, cancels: true },
-  pay: { noun: 'payment', title: 'Recharge & Bills', icon: 'phone', tone: 'green', intro: 'Every recharge, bill and payment, by UPI, card or wallet.', dash: '#/pay/dashboard', base: '#/pay', book: '#/pay/mobile', bookLabel: 'Recharge & pay', stages: [['all', 'All'], ['delivered', 'Successful'], ['new', 'Pending']], returns: false, cancels: false },
+  pay: { noun: 'payment', title: 'Recharge & Bills', icon: 'phone', tone: 'green', intro: 'Every recharge, bill and payment, paid from your wallet.', dash: '#/pay/dashboard', base: '#/pay', book: '#/pay/mobile', bookLabel: 'Recharge & pay', stages: [['all', 'All'], ['delivered', 'Successful'], ['new', 'Pending']], returns: false, cancels: false },
 };
 for (const [k, c] of Object.entries(DESKS)) { c.subs = SUBS[k]; c.transport = ['vehicle', 'courier', 'logistics', 'international'].includes(k); c.alerts = c.transport || k === 'services'; c.settings = k !== 'pay'; }
 const can = (m) => { const p = store.state.user && store.state.user.permissions; return !p || (p[m] || 'none') !== 'none'; };
@@ -38,26 +39,16 @@ const I = {
   download: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11M7 11l5 5 5-5M4 20h16"/></svg>',
 };
 
-const RAIL = {
-  dashboard: '<rect x="3" y="3" width="8" height="8" rx="1.500"/><rect x="13" y="3" width="8" height="5" rx="1.500"/><rect x="13" y="10" width="8" height="11" rx="1.500"/><rect x="3" y="13" width="8" height="8" rx="1.500"/>',
-  book: '<circle cx="12" cy="12" r="9"/><path d="M12 8v8M8 12h8"/>',
-  orders: '<path d="M3 7l9-4 9 4v10l-9 4-9-4z"/><path d="M3 7l9 4 9-4M12 11v10"/>',
-  returns: '<path d="M9 7 4 12l5 5"/><path d="M4 12h11a5 5 0 0 1 5 5v1"/>',
-  cancellations: '<circle cx="12" cy="12" r="9"/><path d="m9 9 6 6M15 9l-6 6"/>',
-  analytics: '<path d="M4 20V10M10 20V4M16 20v-7M21 20H3"/>',
-  tower: '<path d="M12 12v9M8 21h8"/><circle cx="12" cy="9" r="2.500"/><path d="M7 14a7 7 0 0 1 0-10M17 14a7 7 0 0 0 0-10"/>',
-  settings: '<path d="M4 7h10M18 7h2M4 17h2M10 17h10"/><circle cx="16" cy="7" r="2"/><circle cx="8" cy="17" r="2"/>',
-  bulk: '<path d="m12 3 9 5-9 5-9-5z"/><path d="m3 13 9 5 9-5"/>',
-};
-export function deskTabs(key, active) {
-  const c = DESKS[key];
-  const list = [['dashboard', 'Overview', c.dash], ['book', c.transport ? 'New' : c.bookLabel.split(' ')[0], c.book], ['orders', 'Orders', `${c.base}/orders`], ...(c.returns && can('returns') ? [['returns', 'Returns', `${c.base}/returns`]] : []), ...(c.cancels ? [['cancellations', 'Cancelled', `${c.base}/cancellations`]] : []), ['analytics', 'Analytics', `${c.base}/analytics`], ['tower', 'Control', `${c.base}/tower`], ...(c.settings ? [['settings', 'Settings', `${c.base}/settings`]] : []), ...(c.extra ? [['bulk', 'Bulk', c.extra[0][2]]] : [])];
-  return `<nav class="desk-rail" aria-label="${esc(c.title)} sections"><div>${list.map(([k, l, h]) => `<a href="${h}" class="${k === active ? 'active' : ''}" ${k === active ? 'aria-current="page"' : ''}><svg viewBox="0 0 24 24" aria-hidden="true">${RAIL[k]}</svg><span>${esc(l)}</span></a>`).join('')}</div></nav>`;
-}
+// The side rail (Overview, New, Orders, Analytics, Control…) was removed from every service page.
+// Pages still call this, so it stays and returns nothing.
+export function deskTabs() { return ''; }
 
 export async function renderDeskPage(view, { desk, tab, query }) {
   const c = DESKS[desk];
-  view.innerHTML = `<div class="page-head"><div class="row head-t">${tile(c.icon, c.tone).value}<div><h1>${esc(c.title)}</h1><p>${esc(c.intro)}</p></div></div></div>${deskTabs(desk, tab)}<div id="body"></div>`;
+  // Same header as the booking pages: back to where these services live, and a quick way to book again.
+  const back = ['travel', 'pay'].includes(desk) ? ['Travel & Bills', '#/book-pay'] : desk === 'services' ? ['Dashboard', '#/dashboard'] : ['All Orders', `#/my/orders?section=${desk}`];
+  const TAB = { orders: ['Your bookings', 'Every booking in one list. Search, filter, track and download.', ['Live status', 'Invoices and tickets', 'Cancel or track in one tap']], cancellations: ['Cancelled', 'Cancelled bookings and where each refund went.', ['Refund status', 'Back to your wallet', 'Download the list']], analytics: ['Analytics', 'What you spend, with whom, and how it is trending.', ['Spend trends', 'Top providers', 'Compare periods']], tower: ['Control', 'Bookings that need a look, before they become a problem.', ['Delays flagged', 'Stuck bookings', 'One-tap fixes']], settings: ['Settings', 'Defaults for booking and paying.', ['Preferred partners', 'Default payment', 'Alerts']], returns: ['Returns', 'Return requests, pickups and refunds.', ['Pickup tracking', 'Refund status', 'Reasons']] }[tab];
+  view.innerHTML = `${svcHero({ icon: c.icon, tone: c.tone, title: TAB ? `${c.title} · ${TAB[0]}` : c.title, intro: TAB ? TAB[1] : c.intro, back, badges: TAB ? TAB[2] : [], action: `<a class="btn btn-primary" href="${c.book}">+ ${esc(c.bookLabel)}</a>` })}<div id="body" class="card desk-body"></div>`;
   return renderDeskBody(view.querySelector('#body'), desk, tab, query);
 }
 
@@ -124,7 +115,7 @@ async function ordersTab(body, key, query) {
   body.innerHTML = '<div class="skeleton" style="height:300px"></div>';
   const params = { desk: key, sub, stage, ...toApi(range), search, pay };
   const r = await api('/hub/orders', { query: { ...params, page, per_page: 15 } });
-  const fields = [{ key: 'pay', label: 'Payment', options: [['', 'All payments'], ['prepaid', 'Prepaid'], ['cod', 'Pay on delivery']] }];
+  const fields = [];
   const fresh = stage === 'all' && !search && !pay && !sub && !r.stages.all;
   body.innerHTML = `${toolbar({ search, range, count: countActive(fields, { pay }), placeholder: 'Search by order ID, provider or route', tools: true })}
     ${subPills(c, sub, (k) => link({ sub: k, stage: 'all', page: 1 }))}

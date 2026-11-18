@@ -6,7 +6,7 @@ import { head, payTabs, pay, historyCard, options, getCatalog } from './pay.js';
 import { payMethods } from './checkout.js';
 
 const GROUPS = ['Telecom & Recharges', 'Utilities', 'Vehicle Payments', 'Finance & Tax', 'Housing & Society', 'Others'];
-const ICON = { postpaid: ['phone', 'green'], dth: ['tv', 'blue'], cable: ['tv', 'violet'], play: ['gift', 'green'], roaming: ['globe', 'blue'], sim: ['phone', 'coral'], apple: ['gift', 'violet'], subscription: ['tv', 'rose'], electricity: ['electric', 'amber'], gas: ['flame', 'coral'], lpg: ['flame', 'amber'], water: ['drop', 'blue'], broadband: ['wifi', 'violet'], landline: ['phone', 'green'], prepaid_meter: ['electric', 'green'], ev: ['plug', 'green'], ncmc: ['card', 'blue'], metro: ['train', 'violet'], car_ins: ['ride', 'blue'], bike_ins: ['bike', 'green'], accident: ['shield', 'coral'], challan: ['doc', 'amber'], policycheck: ['shield', 'violet'], fleet: ['card', 'amber'], credit: ['card', 'violet'], loan: ['bank', 'blue'], insurance: ['shield', 'green'], rd: ['bank', 'green'], nps: ['bank', 'amber'], itr: ['receipt', 'blue'], tax: ['building', 'amber'], municipal: ['building', 'blue'], rent: ['home', 'green'], society: ['building', 'violet'], clubs: ['team', 'coral'], donation: ['heart', 'rose'], devotion: ['temple', 'amber'], education: ['school', 'blue'], hospital: ['hospital', 'coral'], rentcc: ['home', 'violet'], feescc: ['school', 'violet'] };
+export const ICON = { postpaid: ['phone', 'green'], dth: ['tv', 'blue'], cable: ['tv', 'violet'], play: ['gift', 'green'], roaming: ['globe', 'blue'], sim: ['phone', 'coral'], apple: ['gift', 'violet'], subscription: ['tv', 'rose'], electricity: ['electric', 'amber'], gas: ['flame', 'coral'], lpg: ['flame', 'amber'], water: ['drop', 'blue'], broadband: ['wifi', 'violet'], landline: ['phone', 'green'], prepaid_meter: ['electric', 'green'], ev: ['plug', 'green'], ncmc: ['card', 'blue'], metro: ['train', 'violet'], car_ins: ['ride', 'blue'], bike_ins: ['bike', 'green'], accident: ['shield', 'coral'], challan: ['doc', 'amber'], policycheck: ['shield', 'violet'], fleet: ['card', 'amber'], credit: ['card', 'violet'], loan: ['bank', 'blue'], insurance: ['shield', 'green'], rd: ['bank', 'green'], nps: ['bank', 'amber'], itr: ['receipt', 'blue'], tax: ['building', 'amber'], municipal: ['building', 'blue'], rent: ['home', 'green'], society: ['building', 'violet'], clubs: ['team', 'coral'], donation: ['heart', 'rose'], devotion: ['temple', 'amber'], education: ['school', 'blue'], hospital: ['hospital', 'coral'], rentcc: ['home', 'violet'], feescc: ['school', 'violet'] };
 // Tiles that open their own page.
 const SHORTCUTS = { 'Telecom & Recharges': [['#/pay/mobile', 'phone', 'blue', 'Mobile Recharge']], 'Vehicle Payments': [['#/pay/fastag', 'fastag', 'coral', 'FASTag Recharge']], 'Finance & Tax': [['#/pay/gold', 'coin', 'amber', 'Gold & Silver']], Others: [['#/pay/vouchers', 'gift', 'rose', 'Gift Cards & Vouchers'], ['#/pay/send', 'rupee', 'green', 'Send Money']] };
 const REGULAR = [['rent', 'Rent'], ['maintenance', 'Maintenance'], ['newspaper', 'Newspaper'], ['grocery', 'Grocery or milk'], ['help', 'Domestic help'], ['family', 'Family'], ['salary', 'Fees or salary'], ['services', 'Services'], ['misc', 'Miscellaneous']];
@@ -65,7 +65,6 @@ async function billForm(view, query, c) {
   const mine = home.saved.filter((s) => s.cat === cat);
   const offer = home.offers.find((o) => o.cat === cat);
   view.innerHTML = `${head(ICON[cat] ? ICON[cat][0] : 'bill', 'blue', b.label, `${b.group} · ${b.list.length} ${b.list.length === 1 ? 'biller' : 'billers'}`)}${payTabs('bills')}
-    <a class="link back-link" href="#/pay/bills">← All recharges and bills</a>
     <div class="dash dash--even"><section class="card">
       ${offer ? `<p class="bh-note bh-note--offer"><b>${esc(offer.title)}</b> ${esc(offer.text)}</p>` : ''}
       ${b.fee_pct ? `<p class="bh-note">Paid by credit card. A ${b.fee_pct}% convenience fee applies${offer && offer.waive ? ', waived on your first payment' : ''}.</p>` : ''}
@@ -83,8 +82,12 @@ async function billForm(view, query, c) {
   let bill = null;
   const hist = () => historyCard(view.querySelector('#hist'), 'bills', (x) => x.kind === cat);
   const reset = () => { bill = null; billEl.innerHTML = ''; if (mode !== 'open' && pm) pm.hidden = true; btn.textContent = mode === 'open' ? 'Pay now' : BTN[mode]; };
-  const paid = (r) => { toast(`Paid · ${r.id}${r.cashback ? ` · ₹${r.cashback} cashback added` : ''}`); reset(); form.reset(); hist(); };
-  const send = (body) => pay(btn, err, (x) => api('/hub/bill/pay', { method: 'POST', body: { category: cat, ...body, save_as: form.save_as ? form.save_as.value : '', ...x } }), paid, view);
+  const paid = () => { reset(); form.reset(); hist(); };
+  const send = (body) => pay(btn, err, (x) => api('/hub/bill/pay', { method: 'POST', body: { category: cat, ...body, save_as: form.save_as ? form.save_as.value : '', ...x } }), paid, view, {
+    title: b.label, payee: body.biller, sub: `${b.hint} ${body.account}`, icon: ICON[cat] ? ICON[cat][0] : 'bill', tone: ICON[cat] ? ICON[cat][1] : 'blue', baseLabel: bill ? 'Bill amount' : 'Amount', feeLabel: 'Card convenience fee',
+    cashback: offer && !offer.waive ? offer.title : '', pending: ['electricity', 'water', 'gas', 'broadband', 'lpg', 'postpaid'].includes(cat),
+    rows: bill ? [['Customer', bill.holder], ...(bill.bill_no ? [['Bill number', bill.bill_no]] : []), ['Due date', date(bill.due)]] : [],
+  });
   btn.addEventListener('click', () => {
     if (mode === 'open') return send({ biller: form.biller.value, account: form.account.value, amount: form.amount.value });
     if (bill) return send({ biller: bill.biller, account: bill.account, amount: view.querySelector('#amt').value, auto: view.querySelector('#bauto') && view.querySelector('#bauto').checked });
@@ -97,8 +100,12 @@ async function billForm(view, query, c) {
           return;
         }
         bill = r;
-        billEl.innerHTML = `<dl class="break"><div><dt>${r.quote ? 'Plan' : 'Customer'}</dt><dd>${esc(r.holder)}</dd></div><div><dt>${r.quote ? 'Cover until' : 'Due date'}</dt><dd>${esc(date(r.due))}</dd></div><div class="break__t"><dt>${r.quote ? 'Premium' : 'Amount due'}</dt><dd translate="no">${esc(money(r.amount))}</dd></div></dl>
-          <label class="field mt">Amount to pay (₹)<input class="input" id="amt" inputmode="numeric" value="${r.amount}" ${r.quote ? 'readonly' : ''}></label>${r.quote ? '<p class="muted small">Sandbox quote. A real policy needs the insurer to issue it.</p>' : '<label class="row mt"><input type="checkbox" class="check" id="bauto"> Pay this bill automatically every month</label>'}`;
+        billEl.innerHTML = r.quote ? `<dl class="break"><div><dt>Plan</dt><dd>${esc(r.holder)}</dd></div><div><dt>Cover until</dt><dd>${esc(date(r.due))}</dd></div><div class="break__t"><dt>Premium</dt><dd translate="no">${esc(money(r.amount))}</dd></div></dl>`
+          : `<div class="bill-card"><div class="bill-card__h"><span class="bill-card__ok">✓ Bill fetched</span><small>via Bharat BillPay · ${esc(r.bbps_ref || '')}</small></div>
+            <div class="bill-card__who"><div><small>Customer</small><b>${esc(r.holder)}</b></div><div><small>${esc(b.hint)}</small><b class="mono">${esc(r.account)}</b></div></div>
+            <dl class="bill-card__dl">${r.bill_no ? `<div><dt>Bill number</dt><dd class="mono">${esc(r.bill_no)}</dd></div>` : ''}${r.period ? `<div><dt>Bill period</dt><dd>${esc(r.period)}</dd></div>` : ''}${r.bill_date ? `<div><dt>Bill date</dt><dd>${esc(date(r.bill_date))}</dd></div>` : ''}${r.units ? `<div><dt>Units used</dt><dd>${r.units} kWh</dd></div>` : ''}<div><dt>Due date</dt><dd class="${r.overdue ? 'bill-card__late' : ''}">${esc(date(r.due))}${r.overdue ? ' · overdue' : ''}</dd></div>${r.late_fee ? `<div><dt>Bill amount</dt><dd translate="no">${esc(money(r.base))}</dd></div><div><dt>Late payment fee</dt><dd translate="no" class="bill-card__late">+ ${esc(money(r.late_fee))}</dd></div>` : ''}</dl>
+            <div class="bill-card__due"><span>Amount due</span><b translate="no">${esc(money(r.amount))}</b></div></div>`;
+        billEl.innerHTML += `<label class="field mt">Amount to pay (₹)<input class="input" id="amt" inputmode="numeric" value="${r.amount}" ${r.quote ? 'readonly' : ''}></label>${r.quote ? '<p class="muted small">Sandbox quote. A real policy needs the insurer to issue it.</p>' : '<label class="row mt"><input type="checkbox" class="check" id="bauto"> Pay this bill automatically every month</label>'}`;
         pm.hidden = false; btn.textContent = r.quote ? 'Buy policy' : 'Pay bill';
       } catch (e) { err.textContent = e.message; }
     });
@@ -115,7 +122,6 @@ export async function renderVouchers(view, { query }) {
   const tab = VTABS.some(([k]) => k === query.get('tab')) ? query.get('tab') : 'best';
   const catF = query.get('cat') || '';
   view.innerHTML = `${head('gift', 'rose', 'Brand Vouchers', 'Gift cards for shopping, food, travel and more, with cashback.')}${payTabs('bills')}
-    <a class="link back-link" href="#/pay/bills">← All recharges and bills</a>
     <label class="bh-search bh-search--wide"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.500-3.500"/></svg><input id="vf" type="search" placeholder="Search by brand name" aria-label="Search by brand name"></label>
     <section class="card bh-sec"><h2>Categories</h2><div class="bh-chips">${['', ...d.categories].map((c) => `<a href="#/pay/vouchers?cat=${encodeURIComponent(c)}&tab=${tab}" class="${c === catF ? 'on' : ''}">${esc(c || 'All')}</a>`).join('')}</div></section>
     <div class="dash dash--even"><section class="card"><nav class="tabs tabs--line">${VTABS.map(([k, l]) => `<a href="#/pay/vouchers?tab=${k}&cat=${encodeURIComponent(catF)}" class="${k === tab ? 'active' : ''}">${l}</a>`).join('')}</nav><ul class="vlist" id="vl"></ul></section>
@@ -138,7 +144,7 @@ function buyVoucher(v, done) {
     footer: '<button class="btn btn-outline" data-close>Cancel</button><button class="btn btn-primary" id="vgo">Pay</button>',
     onMount(el, close) {
       const go = el.querySelector('#vgo');
-      go.addEventListener('click', () => { const d = formData(el.querySelector('#vb')); pay(go, el.querySelector('#ve'), (x) => api('/hub/vouchers/buy', { method: 'POST', body: { id: v.id, amount: d.amount, to: d.to, ...x } }), (r) => { close(); modal({ title: 'Gift card ready', body: `<div class="gateway"><b class="mono">${esc(r.code)}</b><p>${esc(money(r.amount))} ${esc(v.brand)} gift card${r.cashback ? ` · ₹${r.cashback} cashback added to your wallet` : ''}.</p><small class="muted">Sandbox code. It cannot be redeemed.</small></div>`, footer: '<button class="btn btn-primary" data-close>Done</button>' }); done(); }, el); });
+      go.addEventListener('click', () => { const d = formData(el.querySelector('#vb')); pay(go, el.querySelector('#ve'), (x) => api('/hub/vouchers/buy', { method: 'POST', body: { id: v.id, amount: d.amount, to: d.to, ...x } }), () => { close(); done(); }, el, { title: 'Gift card', payee: `${v.brand} gift card`, sub: d.to ? `Sent to ${d.to}` : 'For you', icon: 'gift', tone: 'rose', baseLabel: 'Card value', cashback: v.cashback ? `${v.cashback}% cashback` : '', refLabel: 'Voucher reference' }); });
     },
   });
 }
@@ -147,7 +153,6 @@ function buyVoucher(v, done) {
 export async function renderGold(view) {
   const d = await api('/hub/gold');
   view.innerHTML = `${head('coin', 'amber', 'Gold & Silver', 'Buy 24K gold or 99.9% silver in small amounts.')}${payTabs('bills')}
-    <a class="link back-link" href="#/pay/bills">← All recharges and bills</a>
     <div class="grid grid-3"><div class="card stat"><span class="stat__label">Gold you own</span><span class="stat__value">${d.holdings.gold} g</span></div><div class="card stat"><span class="stat__label">Silver you own</span><span class="stat__value">${d.holdings.silver} g</span></div><div class="card stat"><span class="stat__label">Value today</span><span class="stat__value" translate="no">${esc(money(d.value))}</span><span class="muted small">At sandbox prices</span></div></div>
     <div class="dash dash--even"><section class="card"><h2>Buy</h2><form id="gf" class="form-grid" novalidate>
       <div class="field full"><span>Metal</span><div class="seg" role="group"><button type="button" data-m="gold" aria-pressed="true">Gold · ₹${d.rates.gold.toLocaleString('en-IN')}/g</button><button type="button" data-m="silver" aria-pressed="false">Silver · ₹${d.rates.silver.toLocaleString('en-IN')}/g</button></div></div>
@@ -161,7 +166,7 @@ export async function renderGold(view) {
   const fx = () => { const a = Number(form.amount.value) || 0; view.querySelector('#gx').textContent = a ? `About ${((a / 1.03) / d.rates[metal]).toFixed(4)} g of ${metal}` : ''; };
   form.addEventListener('click', (e) => { const m = e.target.closest('[data-m]'); if (m) { metal = m.dataset.m; form.querySelectorAll('[data-m]').forEach((x) => x.setAttribute('aria-pressed', String(x === m))); go.textContent = `Buy ${metal}`; fx(); } const a = e.target.closest('[data-a]'); if (a) { form.amount.value = a.dataset.a; fx(); } });
   form.amount.addEventListener('input', fx); fx();
-  go.addEventListener('click', () => pay(go, view.querySelector('#ge'), (x) => api('/hub/gold/buy', { method: 'POST', body: { metal, amount: form.amount.value, ...x } }), (r) => { toast(`Bought ${r.grams} g of ${metal}`); renderGold(view); }, view));
+  go.addEventListener('click', () => pay(go, view.querySelector('#ge'), (x) => api('/hub/gold/buy', { method: 'POST', body: { metal, amount: form.amount.value, ...x } }), () => { renderGold(view); }, view, (c) => ({ title: `Digital ${metal}`, payee: `Digital ${metal}`, sub: metal === 'gold' ? '24K · 99.9% pure · price includes 3% GST' : '99.9% pure · price includes 3% GST', icon: 'coin', tone: 'amber', baseLabel: 'Amount', refLabel: 'Vault reference' })));
 }
 
 // ---- send money --------------------------------------------------------------------------------
@@ -187,6 +192,6 @@ export async function renderSend(view, { query }) {
   const form = view.querySelector('#sf'); const go = view.querySelector('#go');
   form.amount.addEventListener('input', () => { view.querySelector('#fx').textContent = inrHint(form.amount.value); });
   const hist = () => historyCard(view.querySelector('#hist'), 'bills', (x) => x.kind === 'transfer');
-  go.addEventListener('click', () => { const d = formData(form); delete d.pm; d.repeat = !!d.repeat; pay(go, view.querySelector('#err'), (x) => api('/hub/bill/transfer', { method: 'POST', body: { type, ...d, ...x } }), (r) => { toast(d.repeat ? `Sent · monthly reminder set in Auto-pay` : `Sent · ${r.id}`); form.reset(); hist(); }, view); });
+  go.addEventListener('click', () => { const d = formData(form); delete d.pm; d.repeat = !!d.repeat; pay(go, view.querySelector('#err'), (x) => api('/hub/bill/transfer', { method: 'POST', body: { type, ...d, ...x } }), () => { if (d.repeat) toast('Monthly reminder set in Auto-pay'); form.reset(); hist(); }, view, { title: 'Send money', payee: d.name || 'Recipient', sub: d.to, icon: 'rupee', tone: 'green', baseLabel: 'Amount', refLabel: 'UPI reference (UTR)' }); });
   hist();
 }

@@ -2,7 +2,10 @@
 import { api, esc, money, store, toast, modal, withBusy, dateTime, formData } from '../core.js';
 import { tile } from './art.js';
 import { deskTabs } from './desk.js';
-import { payMethods, checkout, BOOKING_PAY } from './checkout.js';
+import { payMethods, BOOKING_PAY } from './checkout.js';
+import { walletCheckout } from './wallet-checkout.js';
+import { svcHero, BADGES } from './svc-hero.js';
+import { icon } from './icons.js';
 import { sortChips, tagBadges, star, payChoice, statusPill, emptyScene, withFunds, refresh, mountDeals, filterBtn, openFilters, countActive } from './ui.js';
 
 const iso = (offset) => { const d = new Date(Date.now() + offset * 864e5); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
@@ -24,6 +27,16 @@ const KINDS = {
 const RIDE_ICON = { bike: ['bike', 'green'], auto: ['auto', 'amber'], cab: ['ride', 'blue'], xl: ['ride', 'violet'] };
 const rideIcon = (x, k) => { if (k.api !== 'ride') return tile(k.icon, k.tone).value; const t = x.ride_type || (/bike|moto/i.test(x.title || '') ? 'bike' : /auto/i.test(x.title || '') ? 'auto' : /xl|suv/i.test(x.title || '') ? 'xl' : 'cab'); const [i, tone] = RIDE_ICON[t] || RIDE_ICON.cab; return tile(i, tone).value; };
 const memory = {};
+// One-tap searches shown under the form.
+const POPULAR = {
+  flights: [['BLR', 'DEL', 'Bengaluru → Delhi'], ['BOM', 'GOI', 'Mumbai → Goa'], ['DEL', 'BOM', 'Delhi → Mumbai'], ['BLR', 'DXB', 'Bengaluru → Dubai'], ['HYD', 'MAA', 'Hyderabad → Chennai']].map(([from, to, l]) => [{ from, to }, l]),
+  trains: [['Bengaluru', 'Hyderabad'], ['Chennai', 'Bengaluru'], ['Mumbai', 'Pune'], ['Delhi', 'Jaipur']].map(([from, to]) => [{ from, to }, `${from} → ${to}`]),
+  buses: [['Bengaluru', 'Chennai'], ['Bengaluru', 'Goa'], ['Mumbai', 'Pune'], ['Hyderabad', 'Vijayawada'], ['Bengaluru', 'Mysuru']].map(([from, to]) => [{ from, to }, `${from} → ${to}`]),
+  hotels: ['Goa', 'Jaipur', 'Mumbai', 'Kochi', 'Dubai'].map((city) => [{ city }, city]),
+  stays: ['Goa', 'Bengaluru', 'Kochi', 'Jaipur', 'Singapore'].map((city) => [{ city }, city]),
+  rides: [['Koramangala', 'Indiranagar'], ['MG Road', 'Whitefield'], ['HSR Layout', 'Electronic City']].map(([from, to]) => [{ from, to }, `${from} → ${to}`]),
+};
+const OFFER = { travel: { code: 'TRAVEL300', text: '₹300 off travel over ₹3,000' }, rides: { code: 'RIDE20', text: '20% off rides, up to ₹50' }, logistics: { code: 'FIRST100', text: '₹100 off your first booking over ₹300' } };
 window.addEventListener('ut:desk-settings', (e) => { Object.keys(KINDS).forEach((x) => { if ((KINDS[x].group ? 'services' : 'travel') === e.detail) delete memory[x]; }); });
 const TRIP = ['flight', 'bus', 'train'];
 let catalog = null;
@@ -73,10 +86,12 @@ export async function render(view, { kind: key, query }) {
     if (key === 'flights') { const a = catalog.airports.find((x) => x.city.toLowerCase() === v.toLowerCase() || x.code === v.toUpperCase()); if (!a) return; v = a.code; }
     mem.form[n] = v; mem.options = null; auto = true;
   });
-  const tabs = `${deskTabs(k.group ? 'services' : 'travel', 'book')}<nav class="tabs tabs--sub">${Object.entries(KINDS).filter(([, v]) => !!v.group === !!k.group).map(([x, v]) => `<a href="${x === 'rides' ? '#/rides' : `#/${v.group ? 'services' : 'travel'}/${x}`}" class="${x === key ? 'active' : ''}">${esc(v.title)}</a>`).join('')}</nav>`;
+  // Each travel page shows only itself; Travel & Bills is where you pick another one.
+  const tabs = '';
   view.innerHTML = `
-    <div class="page-head"><div class="row head-t">${tile(k.icon, k.tone).value}<div><h1>${esc(k.title)}</h1><p>${esc(k.intro)}</p></div></div></div>${tabs}
-    <form class="card search-bar" id="sf" novalidate>${fields(key, mem.form)}<button class="btn btn-primary" type="submit">Search</button></form>
+    ${svcHero({ icon: k.icon, tone: k.tone, title: k.title, intro: k.intro, back: k.group ? ['Dashboard', '#/dashboard'] : ['Travel & Bills', '#/book-pay'], badges: BADGES[k.group ? 'service' : k.api === 'ride' ? 'ride' : ['hotel', 'stay'].includes(k.api) ? 'stay' : 'travel'], offer: OFFER[k.section] })}${tabs}
+    <form class="card search-bar sb2" id="sf" novalidate>${fields(key, mem.form)}<button class="btn btn-primary sb2__go" type="submit">${icon('search', 17)}Search</button></form>
+    ${POPULAR[key] ? `<div class="svh-pop"><span>Popular</span>${POPULAR[key].map(([v, l], i) => `<button type="button" data-pop="${i}">${esc(l)}</button>`).join('')}</div>` : ''}
     <p class="form-error" id="err"></p>
     <section id="locks"></section>
     <div id="cal"></div>
@@ -84,6 +99,21 @@ export async function render(view, { kind: key, query }) {
     ${k.cal ? '<section id="alerts"></section>' : ''}
     <section class="card" id="history"></section>`;
   const form = view.querySelector('#sf'); const out = view.querySelector('#results'); const err = view.querySelector('#err');
+  // Swap From and To, like every travel app.
+  if (form.from && form.to) {
+    const swap = document.createElement('button');
+    swap.type = 'button'; swap.className = 'sb2__swap'; swap.setAttribute('aria-label', 'Swap from and to');
+    swap.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 4 3 8l4 4M3 8h14M17 20l4-4-4-4M21 16H7"/></svg>';
+    form.from.closest('label').appendChild(swap);
+    swap.addEventListener('click', (e) => { e.preventDefault(); const a = form.from.value; form.from.value = form.to.value; form.to.value = a; swap.classList.remove('spun'); void swap.offsetWidth; swap.classList.add('spun'); });
+  }
+  const pop = view.querySelector('.svh-pop');
+  if (pop) pop.addEventListener('click', (e) => {
+    const b = e.target.closest('[data-pop]'); if (!b) return;
+    const [vals] = POPULAR[key][Number(b.dataset.pop)];
+    Object.entries(vals).forEach(([n, v]) => { if (form[n]) form[n].value = v; });
+    form.requestSubmit();
+  });
   const sorts = [['best', 'Recommended'], ['fast', k.fast], ['low', 'Price: low to high'], ['rating', 'Top rated']];
 
   function paint() {
@@ -203,9 +233,14 @@ function book(o, k, done, lock) {
         delete d.pm;
         try {
           const book_ = (x) => api('/hub/search/book', { method: 'POST', body: { ...x, offer_id: o.id, ...d, coupon: deals.coupon, use_points: deals.use_points, seats: [...picked], addons: [...el.querySelectorAll('[data-add]:checked')].map((c) => c.dataset.add), flex: !!(el.querySelector('#flex') && el.querySelector('#flex').checked) } });
-          let extra = {};
-          if (d.pay_mode !== 'cod') { const check = await book_({ dry_run: true }); extra = await checkout(el, check.amount); if (!extra) return; }
-          const r = await withFunds(() => book_(extra)); close(r); toast(`Booked with ${o.provider} · ${r.id}`); refresh(); done(); }
+          let r;
+          if (d.pay_mode !== 'cod') {
+            const check = await book_({ dry_run: true });
+            const trip = ['flight', 'train', 'bus'].includes(o.kind);
+            r = await walletCheckout({ amount: check.amount, run: book_, info: { title: o.record_title || o.title, payee: o.provider, sub: o.record_sub || o.title || '', icon: { flight: 'plane', train: 'train', bus: 'bus', hotel: 'hotel', stay: 'bed', ride: 'ride' }[o.kind] || 'plane', tone: 'blue', baseLabel: 'Fare', refLabel: trip ? 'PNR' : 'Booking reference', refPrefix: trip ? 'PNR' : 'BK', rows: [['Traveller', `${d.name || ''} · ${d.phone || ''}`]] } });
+            if (!r) return;
+          } else r = await withFunds(() => book_({}));
+          close(r); refresh(); done(); }
         catch (e) { if (!e.quiet) el.querySelector('#tfErr').textContent = e.message; }
       }));
     },

@@ -28,7 +28,16 @@ const RIDES = [['Rapido', 'bike', 'Bike', 0.85, 4.2, 3], ['Rapido', 'auto', 'Aut
 const RIDE_FARE = { bike: [25, 7, 26], auto: [35, 12, 22], cab: [70, 17, 24], xl: [110, 24, 24] };
 const OPERATORS = { Jio: 1, Airtel: 1.06, Vi: 1.04, BSNL: 0.8 };
 const CIRCLES = ['Karnataka', 'Maharashtra', 'Delhi NCR', 'Tamil Nadu', 'Telangana', 'Andhra Pradesh', 'Kerala', 'Gujarat', 'Rajasthan', 'West Bengal', 'Uttar Pradesh'];
-const PLANS = [['p1', 199, '28 days', '1.5 GB/day', 'Popular'], ['p2', 299, '28 days', '2 GB/day', 'Best value'], ['p3', 479, '56 days', '1.5 GB/day', ''], ['p4', 719, '84 days', '2 GB/day', ''], ['p5', 2999, '365 days', '2.5 GB/day', 'Annual'], ['p6', 49, '1 day', '6 GB', 'Data pack'], ['p7', 1599, '30 days', 'International roaming', 'Roaming']];
+// Prepaid plans (demo prices, scaled per operator): id, price, validity, data, tag, category, extras.
+const PLANS = [
+  ['p1', 199, '28 days', '1.5 GB/day', 'Popular', 'popular', 'Unlimited calls · 100 SMS/day'], ['p2', 299, '28 days', '2 GB/day', 'Best value', 'popular', 'Unlimited calls · 100 SMS/day · Unlimited 5G'],
+  ['p3', 479, '56 days', '1.5 GB/day', '', 'unlimited', 'Unlimited calls · 100 SMS/day'], ['p4', 719, '84 days', '2 GB/day', '', 'unlimited', 'Unlimited calls · 100 SMS/day · Unlimited 5G'],
+  ['p8', 349, '28 days', '2.5 GB/day', 'With OTT', 'unlimited', 'Unlimited calls · 100 SMS/day · Streaming app for 28 days'], ['p9', 859, '84 days', '2 GB/day', '', 'unlimited', 'Unlimited calls · 100 SMS/day · Unlimited 5G'],
+  ['p5', 2999, '365 days', '2.5 GB/day', 'Annual', 'annual', 'Unlimited calls · 100 SMS/day · Unlimited 5G'], ['p10', 1899, '336 days', '24 GB total', 'Value annual', 'annual', 'Unlimited calls · 3600 SMS'],
+  ['p6', 49, '1 day', '6 GB', 'Data pack', 'data', 'Data only · uses your current plan validity'], ['p11', 19, '1 day', '1 GB', '', 'data', 'Data only'], ['p12', 149, '30 days', '12 GB', '', 'data', 'Data only'],
+  ['p13', 20, 'No expiry', '₹14.95 talktime', '', 'talktime', 'Talktime top-up'], ['p14', 100, 'No expiry', '₹81.75 talktime', '', 'talktime', 'Talktime top-up'], ['p15', 500, 'No expiry', '₹423.73 talktime', '', 'talktime', 'Talktime top-up'],
+  ['p7', 1599, '30 days', 'International roaming', 'Roaming', 'roaming', '5 GB · 100 min calls · 100 SMS in 50+ countries'], ['p16', 2875, '10 days', 'International roaming', '', 'roaming', 'Unlimited data · 250 min calls in the US, UK and UAE'],
+];
 const FASTAG_ISSUERS = ['ICICI Bank', 'HDFC Bank', 'Axis Bank', 'SBI', 'Kotak Bank', 'IDFC First Bank', 'Airtel Payments Bank', 'IHMCL'];
 // Grouped like the UPI apps. open: you enter the amount. mode quote/lookup: fetch returns a quote or a check.
 const BILLERS = {
@@ -209,7 +218,17 @@ module.exports = function register(routes, { send }, ctx, engine) {
     const rule = h.wallet_rule;
     if (rule.enabled && db.balance - amount < rule.threshold) {
       const need = Math.max(rule.amount, Math.ceil((amount + rule.threshold - db.balance) / 100) * 100);
-      credit(db, need, `Auto top-up from ${rule.source} (demo)`);
+      const mon = new Date().toISOString().slice(0, 7);
+      const used = (h.topups || []).filter((t) => t.kind === 'auto' && t.status === 'SUCCESS' && String(t.at).slice(0, 7) === mon).reduce((s, t) => s + t.amount, 0);
+      if (!rule.monthly_cap || used + need <= rule.monthly_cap) {
+        const list = h.instruments || [];
+        const inst = list.find((x) => x.id === rule.instrument_id) || list.find((x) => x.is_default);
+        const src = inst ? inst.label : rule.source;
+        credit(db, need, `Auto top-up from ${src} (demo)`);
+        if (!h.topups) h.topups = [];
+        h.topups.unshift({ id: newId('TU'), at: iso(Date.now()), amount: need, kind: 'auto', method: inst ? inst.type : 'upi', source: src, status: 'SUCCESS', balance_after: db.balance });
+        if (h.topups.length > 300) h.topups.length = 300;
+      }
     }
     if (db.balance < amount) throw oops(402, 'Your wallet balance is too low for this payment. Add money, then try again.', { shortfall: Math.ceil(amount - db.balance), needs_topup: true });
   }
@@ -317,7 +336,7 @@ module.exports = function register(routes, { send }, ctx, engine) {
   }
 
   function sectionFilter(section, o) {
-    if (section === 'vehicle') return o.mode === 'local' && ['bike', 'auto', 'mini'].includes(o.vehicle) && !['Contractor', 'Third-party logistics'].includes(o.provider_type);
+    if (section === 'vehicle') return o.mode === 'intercity' || (o.mode === 'local' && ['bike', 'auto', 'mini'].includes(o.vehicle) && !['Contractor', 'Third-party logistics'].includes(o.provider_type));
     if (section === 'courier') return o.kind === 'courier';
     if (section === 'logistics') return o.mode === 'ftl' || (o.mode === 'local' && !['bike', 'auto'].includes(o.vehicle) && o.provider_type !== 'Delivery app');
     return true;
@@ -339,8 +358,9 @@ module.exports = function register(routes, { send }, ctx, engine) {
     if (section === 'international' && !req.country) throw oops(400, 'Pick a destination country.');
     const places = mimicPlaces(req);
     const route = engine.resolveRoute(places.req);
-    if (section === 'vehicle' && route.service !== 'local') throw oops(400, 'Bikes, autos and vans only run inside one city. A courier can take this between cities.', { title: 'This trip crosses cities', suggest: 'courier', suggest_query: { from: route.from_pincode, to: route.to_pincode, weight: body.weight } });
-    if (section === 'vehicle' && Number(body.weight) > 750) throw oops(400, 'Bikes, autos and vans carry up to 750 kg. A truck is the right fit for this load.', { title: 'Too heavy for these vehicles', suggest: 'logistics', suggest_query: { from: body.from_place, to: body.to_place, weight: body.weight } });
+    // Between cities, vans and small trucks (up to 3.5 t) drive door to door; inside a city it's bikes to mini trucks.
+    if (section === 'vehicle' && route.service !== 'local' && Number(body.weight) > 3500) throw oops(400, 'Intercity vans and small trucks carry up to 3.5 t. A full truck is the right fit for this load.', { title: 'Too heavy for these vehicles', suggest: 'logistics', suggest_query: { from: body.from_place, to: body.to_place, weight: body.weight } });
+    if (section === 'vehicle' && route.service === 'local' && Number(body.weight) > 750) throw oops(400, 'Bikes, autos and vans carry up to 750 kg. A truck is the right fit for this load.', { title: 'Too heavy for these vehicles', suggest: 'logistics', suggest_query: { from: body.from_place, to: body.to_place, weight: body.weight } });
     const segment = section === 'logistics' ? 'b2b' : body.segment === 'b2b' ? 'b2b' : 'b2c';
     const input = engine.parseInput({ ...req, ...route, segment, declared_value: body.insure ? body.value : 0, priority: 'best' });
     if (places.labels.from) input.from = places.labels.from;
@@ -393,6 +413,9 @@ module.exports = function register(routes, { send }, ctx, engine) {
         o.on_time = 86 + (seed % 13); // simulated service record
         o.claims_pct = +(0.2 + (seed % 9) / 10).toFixed(1);
         o.save = Math.max(0, Math.round(avg + stopFee - o.total));
+        // Pay on delivery: not for truck loads or exports (paid in advance), not on India Post,
+        // and only up to ₹5,000 so a partner is never carrying a large cash collection.
+        o.cod = !['logistics', 'international'].includes(section) && o.provider !== 'India Post' && o.total <= 5000;
         o.co2 = +((input.distanceKm || 5000) * ({ bike: 0.04, auto: 0.08, mini: 0.18, parcel: 0.1, ptl: 0.3, plane: 1.4, air: 1.4, ship: 0.2 }[o.vehicle] || 0.6)).toFixed(1);
       });
       // Rank by value, arrival and service record together.
@@ -437,7 +460,8 @@ module.exports = function register(routes, { send }, ctx, engine) {
     if (places.pickup && !(places.pickup.contact && places.pickup.contact.phone)) places.pickup.contact = { name: text(c.name, 60), phone: c.phone };
     if (places.drop && !(places.drop.contact && places.drop.contact.phone && places.drop.contact.name)) throw oops(400, 'Add the name and mobile number of the person who receives it.');
     if (places.pickup && places.drop && places.pickup.lat != null && places.drop.lat != null && Math.abs(places.pickup.lat - places.drop.lat) < 0.0003 && Math.abs(places.pickup.lng - places.drop.lng) < 0.0003) throw oops(400, 'Pickup and drop are the same spot. Move one of the pins.');
-    const pay = body.pay_mode === 'cod' ? 'cod' : 'prepaid';
+    const pay = 'prepaid'; // every booking is paid from the wallet; pay on delivery is not offered
+    if (pay === 'cod' && option.cod === false) throw oops(400, `${option.provider} does not take pay on delivery for this trip. Pay online, or pick a partner marked "Pay on delivery".`);
     const fee = pay === 'cod' ? Math.max(25, Math.round(option.total * 0.015)) : 0;
     const extras = (Array.isArray(body.extras) ? body.extras : []).filter((x) => EXTRAS[x]);
     const extraFee = extras.reduce((t, x) => t + EXTRAS[x], 0);
@@ -489,7 +513,15 @@ module.exports = function register(routes, { send }, ctx, engine) {
     const search = (url.searchParams.get('search') || '').trim().toLowerCase();
     const scope = url.searchParams.get('scope');
     let list = h.records.map(live);
+    // Per-service counts for the filter chips, before the service filter is applied.
+    const inPeriod = (r) => { const t = Date.parse(r.at); return t >= since && t < until; };
+    const sections = {};
+    list.filter((r) => (!(since || until < Infinity) || inPeriod(r)) && (!search || `${r.id} ${r.title} ${r.provider} ${r.sub} ${r.reference || ''}`.toLowerCase().includes(search))).forEach((r) => { sections[r.section] = (sections[r.section] || 0) + 1; });
     if (section) list = list.filter((r) => r.section === section);
+    const channel = url.searchParams.get('channel');
+    if (channel === 'direct') list = list.filter((r) => r.source !== 'website');
+    else if (channel === 'online') list = list.filter((r) => r.source === 'website');
+    else if (channel) list = list.filter((r) => r.channel === channel || (r.source === 'website' && !r.channel && channel === 'custom'));
     if (url.searchParams.get('desk')) list = desks.pick(list, url.searchParams.get('desk'), url.searchParams.get('sub'));
     if (scope === 'transport') list = list.filter((r) => ['vehicle', 'courier', 'logistics', 'international'].includes(r.section));
     if (scope === 'domestic') list = list.filter((r) => ['vehicle', 'courier', 'logistics'].includes(r.section));
@@ -497,19 +529,48 @@ module.exports = function register(routes, { send }, ctx, engine) {
     const payF = url.searchParams.get('pay');
     if (payF) list = list.filter((r) => r.pay_mode === payF);
     if (since || until < Infinity) list = list.filter((r) => { const t = Date.parse(r.at); return t >= since && t < until; });
-    if (search) list = list.filter((r) => `${r.id} ${r.title} ${r.provider} ${r.sub}`.toLowerCase().includes(search));
+    if (search) list = list.filter((r) => `${r.id} ${r.title} ${r.provider} ${r.sub} ${r.reference || ''}`.toLowerCase().includes(search));
     const counts = { all: list.length, new: 0, assigned: 0, transit: 0, delivered: 0, cancelled: 0 };
     list.forEach((r) => { counts[r.group] = (counts[r.group] || 0) + 1; });
     const stages = desks.stageCounts(list);
     const gone = list.filter((r) => r.status === 'CANCELLED');
     const refunded = gone.reduce((t, r) => t + desks.refundOf(r), 0);
     const cancel_rate = list.length ? Math.round((gone.length / list.length) * 100) : 0;
+    // Overview for the selected service: no money, just volume, flow and reliability.
+    const t0 = new Date().setHours(0, 0, 0, 0);
+    const allTime = h.records.map(live).filter((r) => (section ? r.section === section : ['vehicle', 'courier', 'logistics', 'international'].includes(r.section)));
+    const okList = allTime.filter((r) => r.status !== 'CANCELLED');
+    const doneL = okList.filter((r) => r.group === 'delivered');
+    let onTime = 0; let judged = 0;
+    doneL.forEach((r) => {
+      if (!r.booking_id || !r.promised_by) return;
+      const t = engine.trackById(r.booking_id);
+      const ev = t && (t.timeline || []).find((e) => e.status === 'DELIVERED');
+      if (!ev) return;
+      judged++; if (Date.parse(ev.at) <= Date.parse(r.promised_by) + 15 * 60000) onTime++;
+    });
+    const stg = desks.stageCounts(list);
+    const overview = {
+      today: okList.filter((r) => Date.parse(r.at) >= t0).length, yesterday: okList.filter((r) => { const t = Date.parse(r.at); return t >= t0 - day && t < t0; }).length,
+      active: okList.filter((r) => ['new', 'assigned', 'transit'].includes(r.group)).length, completed: doneL.length,
+      on_time: judged ? Math.round((onTime / judged) * 100) : null, on_time_n: onTime, on_time_of: judged,
+      stages: { new: stg.new + stg.paylater, pickups: stg.scheduled + stg.assigned, transit: stg.transit, delivered: stg.delivered, lost: stg.lost, cancelled: stg.cancelled, all: list.length,
+        returns: ((h.ops2 && h.ops2.returns) || []).filter((rt) => list.some((r) => r.id === rt.order_id)).length },
+    };
+    const paidL = list.filter((r) => r.status !== 'CANCELLED');
+    const activeL = paidL.filter((r) => ['new', 'assigned', 'transit'].includes(r.group));
+    const spend = paidL.reduce((t, r) => t + r.amount, 0);
+    const summary = { spend, avg: paidL.length ? Math.round(spend / paidL.length) : 0, active: activeL.length, delivered: paidL.filter((r) => r.group === 'delivered').length,
+      cod_collect: activeL.reduce((t, r) => t + (r.cod_collect || 0), 0), cod_orders: activeL.filter((r) => r.cod_collect || r.pay_mode === 'cod').length,
+      online: list.filter((r) => r.source === 'website').length, website_pending: ((h.website && h.website.orders) || []).filter((o) => o.status === 'pending').length };
     if (group && group !== 'all') list = list.filter((r) => r.group === group);
     const stage = url.searchParams.get('stage');
-    if (stage === 'all') list = list.filter((r) => r.status !== 'CANCELLED');
+    if (stage === 'pickups') list = list.filter((r) => ['scheduled', 'assigned'].includes(desks.stageOf(r)));
+    else if (stage === 'new2') list = list.filter((r) => ['new', 'paylater'].includes(desks.stageOf(r)));
+    else if (stage === 'all') list = list.filter((r) => r.status !== 'CANCELLED');
     else if (stage === 'cancellable') list = list.filter(desks.cancellable);
     else if (stage) list = list.filter((r) => desks.stageOf(r) === stage);
-    send(res, 200, { ...paginate(list, url), counts, stages, refunded, cancel_rate });
+    send(res, 200, { ...paginate(list, url), counts, stages, refunded, cancel_rate, sections, summary, overview });
   });
 
   // ---- summaries -------------------------------------------------------------------
@@ -599,7 +660,7 @@ module.exports = function register(routes, { send }, ctx, engine) {
   routes['POST /v1/hub/desk/settings'] = hub(({ res, url, body, h }) => {
     const cfg = desks.settingsOf(h, deskKey(url));
     if (body.sort != null) { if (!['best', 'fast', 'low', 'rating'].includes(body.sort)) throw oops(400, 'Pick a sort order.'); cfg.sort = body.sort; }
-    if (body.pay_mode != null) cfg.pay_mode = body.pay_mode === 'cod' ? 'cod' : 'prepaid';
+    if (body.pay_mode != null) cfg.pay_mode = 'prepaid';
     if (body.pickup != null) cfg.pickup = text(body.pickup, 80);
     if (Array.isArray(body.blocked)) { const b = body.blocked.map((x) => text(x, 60)).filter(Boolean); if (cfg.seen.length && cfg.seen.every((p) => b.includes(p))) throw oops(400, 'Keep at least one partner switched on.'); cfg.blocked = b; }
     for (const k of ['delay_hours', 'stuck_hours']) if (body[k] != null) { const n = Number(body[k]); if (!(Number.isInteger(n) && n >= 1 && n <= 72)) throw oops(400, 'Enter whole hours from 1 to 72.'); cfg[k] = n; }
@@ -694,7 +755,7 @@ module.exports = function register(routes, { send }, ctx, engine) {
   });
   routes['GET /v1/hub/nav-counts'] = hub(({ res, h }) => {
     const all = h.records.map(live);
-    send(res, 200, { orders: all.filter((r) => ['new', 'assigned', 'transit'].includes(r.group)).length, returns: ((h.ops2 && h.ops2.returns) || []).filter((rt) => rt.status === 'REQUESTED').length, pay: upcomingOf(h).filter((u) => u.days <= 7).length });
+    send(res, 200, { orders: all.filter((r) => ['new', 'assigned', 'transit'].includes(r.group)).length, returns: ((h.ops2 && h.ops2.returns) || []).filter((rt) => rt.status === 'REQUESTED').length, pay: upcomingOf(h).filter((u) => u.days <= 7).length, website: ((h.website && h.website.orders) || []).filter((o) => o.status === 'pending').length });
   });
 
   routes['GET /v1/hub/summary'] = hub(({ res, db, h, perms }) => {
@@ -899,7 +960,8 @@ module.exports = function register(routes, { send }, ctx, engine) {
   routes['GET /v1/hub/plans'] = hub(({ res, url }) => {
     const op = url.searchParams.get('operator');
     if (!OPERATORS[op]) throw oops(400, 'Pick an operator.');
-    send(res, 200, { operator: op, plans: PLANS.map(([id, price, validity, data, tag]) => ({ id, price: Math.round(price * OPERATORS[op]), validity, data, tag })) });
+    // Talktime packs keep their face value; everything else scales by operator.
+    send(res, 200, { operator: op, categories: [['popular', 'Popular'], ['unlimited', 'Unlimited'], ['data', 'Data'], ['talktime', 'Talktime'], ['annual', 'Annual'], ['roaming', 'Roaming']], plans: PLANS.map(([id, price, validity, data, tag, category, extras]) => ({ id, price: category === 'talktime' ? price : Math.round(price * OPERATORS[op]), validity, data, tag, category, extras })) });
   });
 
   routes['POST /v1/hub/recharge/mobile'] = hub(({ res, body, db, h }) => {
@@ -907,12 +969,13 @@ module.exports = function register(routes, { send }, ctx, engine) {
     if (!OPERATORS[body.operator]) throw oops(400, 'Pick an operator.');
     const plan = PLANS.find((p) => p[0] === body.plan_id);
     if (!plan) throw oops(400, 'Pick a plan.');
-    const amount = Math.round(plan[1] * OPERATORS[body.operator]);
+    const amount = plan[5] === 'talktime' ? plan[1] : Math.round(plan[1] * OPERATORS[body.operator]);
     if (body.dry_run) return dryRun(res, h, amount);
     const via = settle(db, h, amount, `Mobile recharge · ${body.operator} · ${body.number}`, body.payment_id);
-    const rec = addRecord(h, { section: 'recharge', kind: 'mobile', title: `Mobile recharge ₹${amount}`, provider: body.operator, sub: body.number, amount, pay_mode: 'prepaid', ...via });
+    // Operator reference, like the one a real recharge returns.
+    const rec = addRecord(h, { section: 'recharge', kind: 'mobile', title: `Mobile recharge ₹${amount}`, provider: body.operator, sub: body.number, amount, pay_mode: 'prepaid', plan: `${plan[3]} · ${plan[2]}`, operator_ref: `${body.operator.slice(0, 2).toUpperCase()}${Date.now().toString().slice(-8)}${crypto.randomInt(10, 99)}`, ...via });
     if (body.auto && !h.accounts.some((a) => a.type === 'mobile' && a.label === body.number)) h.accounts.push({ id: newId('A'), type: 'mobile', provider: body.operator, label: body.number, balance: null, auto: true, threshold: null, amount, last_run: iso(Date.now()), next_due: localDay(Date.now() + 28 * day) });
-    send(res, 200, { id: rec.id, amount, wallet_balance: db.balance });
+    send(res, 200, { id: rec.id, amount, wallet_balance: db.balance, operator_ref: rec.operator_ref, plan: rec.plan });
   });
 
   const VEHICLE_RE = /^[A-Z]{2}\s?\d{1,2}\s?[A-Z]{0,3}\s?\d{4}$/;
@@ -952,7 +1015,17 @@ module.exports = function register(routes, { send }, ctx, engine) {
       const base = body.category === 'car_ins' ? 2400 : 700;
       return send(res, 200, { biller: body.biller, account, holder: `${body.category === 'car_ins' ? 'Comprehensive' : 'Two-wheeler'} policy, 1 year`, amount: base + (seed % (base * 2)), due: iso(Date.now() + 365 * day).slice(0, 10), quote: true });
     }
-    send(res, 200, { biller: body.biller, account, holder: 'Registered customer', amount: 180 + (seed % 3400), due: iso(Date.now() + (3 + seed % 15) * day).slice(0, 10) });
+    // A realistic fetched bill (demo): the name on the account, bill dates, and a late fee once overdue.
+    const NAMES = ['Asha Rao', 'Rahul Verma', 'Priya Sharma', 'Karthik Reddy', 'Meera Nair', 'Arjun Mehta', 'Sneha Kulkarni', 'Vikram Singh'];
+    const name = NAMES[seed % NAMES.length].split(' ');
+    const masked = `${name[0]} ${name[1][0]}${'*'.repeat(Math.max(2, name[1].length - 1))}`;
+    const billDate = Date.now() - (6 + (seed % 20)) * day;
+    const dueIn = (seed % 22) - 4; // a few bills are already overdue
+    const base = 180 + (seed % 3400);
+    const late = dueIn < 0 ? Math.max(25, Math.round(base * 0.02)) : 0;
+    const units = body.category === 'electricity' ? 80 + (seed % 420) : null;
+    const month = new Date(billDate - 20 * day).toLocaleString('en-IN', { month: 'short', year: 'numeric' });
+    send(res, 200, { biller: body.biller, account, holder: masked, amount: base + late, base, late_fee: late, due: iso(Date.now() + dueIn * day).slice(0, 10), overdue: dueIn < 0, bill_date: iso(billDate).slice(0, 10), bill_no: `${body.biller.replace(/[^A-Z]/g, '').slice(0, 3) || 'BIL'}${String(seed).slice(0, 9)}`, period: month, units, bbps_ref: `BBPS${String(hash(account + Date.now())).slice(0, 10)}` });
   });
   // Card fee, waived once by an offer.
   const billFee = (h, key, cat, amount) => {
@@ -971,9 +1044,10 @@ module.exports = function register(routes, { send }, ctx, engine) {
     const fee = billFee(h, key, cat, amount);
     const total = amount + fee;
     if (body.dry_run) { spendGuard(h, total, true); return send(res, 200, { ok: true, amount: total, fee }); }
-    if (cat.cc_only) { const p = body.payment_id && findPaid(h, total, body.payment_id); if (!p || !['card', 'emi'].includes(p.method)) throw oops(400, 'Pay this by credit card or card EMI.'); }
+    // Card-only billers once needed a card payment; everything is now paid from the wallet, so a card is only checked when one is used.
+    if (cat.cc_only && body.payment_id) { const p = findPaid(h, total, body.payment_id); if (!p || !['card', 'emi'].includes(p.method)) throw oops(400, 'Pay this by credit card or card EMI.'); }
     const via = settle(db, h, total, `${cat.label} · ${body.biller} · ${account}`, body.payment_id, cat.no_card);
-    const rec = addRecord(h, { section: 'bills', kind: key, title: cat.open ? cat.label : `${cat.label} bill`, provider: body.biller, sub: account, amount: total, fee, pay_mode: 'prepaid', ...via });
+    const rec = addRecord(h, { section: 'bills', kind: key, title: cat.open ? cat.label : `${cat.label} bill`, provider: body.biller, sub: account, amount: total, fee, pay_mode: 'prepaid', bbps_ref: `BBPS${Date.now().toString().slice(-6)}${crypto.randomInt(1000, 9999)}`, ...via });
     // Cashback: the best unused offer for this category.
     h.billOffers = h.billOffers || [];
     if (key === 'rentcc' && !h.billOffers.includes('RENTFREE')) h.billOffers.push('RENTFREE');
@@ -983,7 +1057,7 @@ module.exports = function register(routes, { send }, ctx, engine) {
     if (body.auto && !h.accounts.some((a) => a.type === 'bill' && a.label === account)) h.accounts.push({ id: newId('A'), type: 'bill', provider: body.biller, label: account, balance: null, auto: true, threshold: null, amount, last_run: iso(Date.now()), next_due: localDay(Date.now() + 28 * day) });
     const nick = text(body.save_as, 40);
     if (nick) { h.savedBills = (h.savedBills || []).filter((s) => !(s.cat === key && s.account === account)); h.savedBills.unshift({ id: newId('SB'), cat: key, biller: body.biller, account, nickname: nick, last: total, at: iso(Date.now()) }); h.savedBills = h.savedBills.slice(0, 30); }
-    send(res, 200, { id: rec.id, amount: total, fee, cashback, wallet_balance: db.balance });
+    send(res, 200, { id: rec.id, amount: total, fee, cashback, wallet_balance: db.balance, bbps_ref: rec.bbps_ref });
   });
   routes['GET /v1/hub/bill/home'] = hub(({ res, h }) => {
     // Suggested: what you pay most, then popular picks.
@@ -1410,5 +1484,5 @@ module.exports = function register(routes, { send }, ctx, engine) {
     send(res, 200, { ...p, workspace: workspaceOf(h), score: profileScore(p, db), score_total: 7, apps: APPS.map(([key, name, group]) => ({ key, name, group, connected: !!p.connected[key] })) });
   });
 
-  return { hub, hubOf, live, oops, text, takePayment, addRecord, offers };
+  return { hub, hubOf, live, oops, text, takePayment, addRecord, offers, upcomingOf };
 };

@@ -27,7 +27,7 @@ const PIN2 = { 11: [28.6, 77.2], 12: [29.0, 76.1], 13: [29.4, 76.4], 14: [30.9, 
   60: [13.08, 80.27], 61: [10.8, 78.7], 62: [9.9, 78.1], 63: [11.0, 77.0], 64: [11.0, 76.96], 67: [11.3, 75.8], 68: [9.9, 76.3], 69: [8.5, 76.9],
   70: [22.57, 88.36], 71: [22.6, 88.3], 72: [22.4, 87.3], 73: [26.7, 88.4], 74: [23.4, 88.5], 75: [20.3, 85.8], 76: [19.3, 84.8], 77: [21.5, 84.0], 78: [26.1, 91.7], 79: [25.6, 93.9],
   80: [25.6, 85.1], 81: [25.2, 86.9], 82: [24.8, 85.0], 83: [23.3, 85.3], 84: [26.1, 85.4], 85: [25.0, 87.2] };
-const COUNTRY_GROUP = { 'United Arab Emirates': 1, Singapore: 1, 'United Kingdom': 2, Germany: 2, 'United States': 3, Canada: 3, Australia: 3 };
+const COUNTRY_GROUP = require('./countries').groupOf; // 1 near, 2 mid, 3 far: sets transit days and freight rates
 
 const R = 6371;
 const rad = (d) => (d * Math.PI) / 180;
@@ -132,6 +132,11 @@ function freeNearby(cityKey, provider, vehicle, pickupAt) {
 }
 // Part-truck carriers and full-truck providers (third-party logistics and contractors). Demo rates.
 const PTL_PROVIDERS = [['Delhivery', 1, 4.3], ['Gati', 0.96, 4.1], ['Safexpress', 1.06, 4.4], ['TCI Express', 1.02, 4.2], ['Xpressbees Cargo', 0.94, 4.0], ['Blue Dart Surfaceline', 1.18, 4.5]];
+// Intercity vehicles: a dedicated van or small truck that drives door to door between cities.
+// Demo data: Porter Intercity and Vahak are real services; the prices and ratings are simulated and the
+// independent owner is fictional.
+const INTERCITY_PROVIDERS = [['Porter Intercity', 'Delivery app', 'app', 1, 4.5], ['Vahak', 'Load marketplace', 'independent', 0.92, 4.2], ['LoadShare', 'Delivery app', 'app', 1.04, 4.3], ['Shree Ganesh Tempo Service', 'Independent vehicle', 'independent', 0.88, 4.4]];
+const INTERCITY_VEHICLES = ['mini', 'pickup8', 'truck14'];
 const FTL_PROVIDERS = [['Salim Cargo Movers', 'Independent vehicle', 1, 4.4], ['Highway Freightlines', 'Independent vehicle', 0.97, 4.5], ['BlackBuck', 'Third-party logistics', 0.95, 4.2], ['Mahindra Logistics', 'Third-party logistics', 1.08, 4.5], ['TCI Freight', 'Third-party logistics', 1.04, 4.3], ['Deccan Haulage Contractors', 'Contractor', 0.9, 4.1]];
 const DRIVERS = ['Ravi K.', 'Imran S.', 'Suresh P.', 'Anil M.', 'Joseph D.', 'Harpreet S.', 'Manoj T.', 'Venkat R.', 'Salim A.', 'Deepak N.'];
 const STATE_CODE = { bengaluru: 'KA', mumbai: 'MH', delhi: 'DL', hyderabad: 'TS', chennai: 'TN', pune: 'MH' };
@@ -171,7 +176,12 @@ module.exports = function register(routes, { send, authUser }, ctx) {
     const weight = Number(b.weight);
     if (!(weight > 0 && weight <= 40000)) throw new Error('Enter the total weight (up to 40,000 kg).');
     const dims = ['length', 'breadth', 'height'].map((k) => Number(b[k]) || 0);
-    const volumeM3 = dims.every((d) => d > 0) ? (dims[0] * dims[1] * dims[2] * pieces) / 1e6 : 0;
+    let volumeM3 = dims.every((d) => d > 0) ? (dims[0] * dims[1] * dims[2] * pieces) / 1e6 : 0;
+    // Boxes of different sizes: add each box (up to 50 listed).
+    if (Array.isArray(b.boxes) && b.boxes.length) {
+      const boxes = b.boxes.slice(0, 50).map((x) => ['l', 'b', 'h'].map((k) => Math.max(0, Math.min(1000, Number(x && x[k]) || 0))));
+      if (boxes.every((x) => x.every((d) => d > 0))) volumeM3 = boxes.reduce((t, [l, w, h]) => t + (l * w * h) / 1e6, 0) * (pieces > boxes.length ? pieces / boxes.length : 1);
+    }
     const priority = ['fastest', 'cheapest', 'best'].includes(b.priority) ? b.priority : 'best';
     const pickupAt = b.pickup_at ? Date.parse(b.pickup_at) : Date.now();
     if (Number.isNaN(pickupAt) || pickupAt < Date.now() - 5 * 60000) throw new Error('Pick a pickup time from now onwards.');
@@ -262,6 +272,22 @@ module.exports = function register(routes, { send, authUser }, ctx) {
         PTL_PROVIDERS.forEach(([provider, mult, rating], n) => add({ mode: 'ptl', vehicle: 'ptl', kind: 'courier', title: 'Heavy surface · part truck', provider, provider_type: 'Courier service', verified: true, rating,
           capacity: 'Up to 3 t · shared truck, 50 kg minimum', max_kg: 3000, availability: 'Pickup tomorrow', pickup_within_min: 1440, price: Math.round(Math.max(1500, kg * (6 + i.distanceKm * 0.0045)) * 1.18 * mult), eta: i.pickupAt + hours(24 * (d + (n % 2))), days: d + (n % 2), segment: 'b2b', note: 'Palletised, hub to hub with door pickup and delivery' }));
       }
+      // Intercity vehicles: vans and small trucks, door to door with one driver, no hubs.
+      if (i.distanceKm <= 2000) {
+        for (const v of VEHICLES.filter((x) => INTERCITY_VEHICLES.includes(x.key) && x.kg >= i.weight && (!i.volumeM3 || x.m3 >= i.volumeM3))) {
+          if (v.kg > Math.max(1250, i.weight * 5)) continue;
+          const drive = Math.round((i.distanceKm / 45) * 60); // highway average incl. stops
+          const tripMin = drive + Math.floor(i.distanceKm / 600) * 8 * 60 + 30; // driver rest every ~600 km, + loading
+          INTERCITY_PROVIDERS.forEach(([provider, provider_type, kind, mult, rating], n) => {
+            const pickupMin = 90 + n * 45;
+            const fare = (v.base * 2 + v.per_km_ftl * 1.1 * i.distanceKm + 250 * Math.ceil(i.distanceKm / 250) + i.helpers * 400) * mult;
+            add({ mode: 'intercity', vehicle: v.key, kind, title: `${v.name} · intercity`, provider, provider_type, verified: true, rating,
+              capacity: `${niceKg(v.kg)} · ${v.m3} m³ · dedicated`, max_kg: v.kg, availability: `Vehicle in ${Math.round(pickupMin / 60 * 10) / 10} h`, pickup_within_min: pickupMin,
+              price: Math.round(fare * 1.18), eta_pickup_min: pickupMin, trip_min: tripMin, eta: Math.max(i.pickupAt, Date.now() + pickupMin * 60000) + tripMin * 60000,
+              days: Math.max(1, Math.ceil(tripMin / 1440)), segment: 'both', note: 'Door to door, one driver, no hub transfers · tolls included' });
+          });
+        }
+      }
       // Full truck load (FTL) by vehicle class.
       for (const v of VEHICLES.filter((x) => x.per_km_ftl && x.kg >= i.weight && (!i.volumeM3 || x.m3 >= i.volumeM3))) {
         if (i.weight < 300 && v.kg > 1500) continue;
@@ -321,6 +347,8 @@ module.exports = function register(routes, { send, authUser }, ctx) {
     pin_cities: Object.fromEntries(Object.entries(CITY_BY_PIN3).map(([pin, key]) => [pin, CITIES[key].name])),
     country_points: { 'United States': [39, -98], 'United Kingdom': [54, -2], 'United Arab Emirates': [24, 54], Singapore: [1.35, 103.8], Australia: [-25, 134], Canada: [56, -106], Germany: [51, 10] },
     countries: Object.keys(COUNTRIES),
+    country_list: require('./countries').DESTINATIONS.map(({ name, code, region }) => ({ name, code, region })),
+    popular_countries: require('./countries').POPULAR,
     vehicles: VEHICLES.map(({ key, name, kg, m3, use }) => ({ key, name, kg, m3, use })),
     categories: ['Documents', 'Parcel / e-commerce', 'Food & groceries', 'Electronics', 'Furniture & household', 'Industrial / machinery', 'Construction material', 'Pharma (non-cold)', 'FMCG / retail stock'],
     partners: SEED_PARTNERS.length + partners.filter((p) => p.status === 'ACTIVE').length,
@@ -353,11 +381,17 @@ module.exports = function register(routes, { send, authUser }, ctx) {
   const SPEED = { local: 20, national: 2000, international: 2000 };
   // A courier booked inside a city runs on the courier timeline, not the on-demand one.
   const onDemand = (b) => b.option.mode === 'local';
+  const intercity = (b) => b.option.mode === 'intercity';
   const speedOf = (b) => SPEED[onDemand(b) ? 'local' : 'national'];
   function stagesFor(b) {
     if (onDemand(b)) {
       return [['BOOKED', 'Booking confirmed', 0], ['ASSIGNED', `Driver assigned · ${b.driver.name}`, 0.5], ['ARRIVING', 'Driver on the way to pickup', 1],
         ['PICKED_UP', 'Picked up', b.option.eta_pickup_min], ['IN_TRANSIT', 'On the way to drop', b.option.eta_pickup_min + 2], ['DELIVERED', 'Delivered', b.option.eta_pickup_min + b.option.trip_min]];
+    }
+    if (intercity(b)) {
+      const p = b.option.eta_pickup_min; const t = b.option.trip_min;
+      return [['BOOKED', 'Booking confirmed', 0], ['ASSIGNED', `Driver assigned · ${b.driver.name}`, 2], ['ARRIVING', 'Driver on the way to pickup', p * 0.5],
+        ['PICKED_UP', 'Loaded and picked up', p], ['IN_TRANSIT', 'On the highway', p + 5], ['IN_TRANSIT', 'Entering the destination city', p + t * 0.85], ['DELIVERED', 'Delivered', p + t]];
     }
     const total = (Date.parse(b.option.eta) - b.pickup_at) / 60000;
     const air = /air|plane/.test(b.option.mode + b.option.vehicle);
@@ -433,9 +467,9 @@ module.exports = function register(routes, { send, authUser }, ctx) {
     return {
       id: b.id, status: current.status, label: current.label, service: b.service, segment: b.segment, created_at: iso(b.created_at),
       route: b.route, option: { title: b.option.title, provider: b.option.provider, provider_type: b.option.provider_type, capacity: b.option.capacity },
-      driver: onDemand(b) && ['ASSIGNED', 'ARRIVING', 'PICKED_UP', 'IN_TRANSIT'].includes(current.status) ? b.driver : null,
+      driver: (onDemand(b) || intercity(b)) && ['ASSIGNED', 'ARRIVING', 'PICKED_UP', 'IN_TRANSIT'].includes(current.status) ? b.driver : null,
       // Pickup OTP until the parcel is collected, then the delivery OTP.
-      otp: onDemand(b) && current.status !== 'DELIVERED' ? (['BOOKED', 'ASSIGNED', 'ARRIVING'].includes(current.status) ? { pickup: b.pickup_otp } : { delivery: b.delivery_otp }) : null,
+      otp: current.status === 'DELIVERED' ? null : (onDemand(b) || intercity(b)) ? (['BOOKED', 'ASSIGNED', 'ARRIVING'].includes(current.status) ? { pickup: b.pickup_otp } : { delivery: b.delivery_otp }) : current.status === 'OUT_FOR_DELIVERY' ? { delivery: b.delivery_otp } : null,
       progress: +progress.toFixed(3), remaining_min: current.status === 'DELIVERED' ? 0 : Math.round(remainingMin), promised_by: b.option.eta,
       timeline: timeline.reverse(), demo_speed: speedOf(b), total: b.option.total, from_pt: b.from_pt, to_pt: b.to_pt,
     };

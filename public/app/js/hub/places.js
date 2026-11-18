@@ -139,7 +139,10 @@ export function openPlacePicker({ kind = 'pickup', start = null, other = null, s
           } catch (e) { host.querySelector('#plErr').textContent = e.message; }
         };
         if (map) { map.onIdle(update); setTimeout(() => { map.resize(); update(); }, 60); }
-        ok.onclick = () => { if (here) stepDetails({ ...seed, ...here, pincode: seed.pincode && !here.pincode ? seed.pincode : here.pincode }); };
+        // A pin code the person typed or saved wins while the pin stays in that area; the
+        // map only knows areas roughly, so its nearest pin code is a fallback.
+        const keepPin = (a, b) => (a && (!b || a.slice(0, 3) === b.slice(0, 3)) ? a : b || a);
+        ok.onclick = () => { if (here) stepDetails({ ...seed, ...here, pincode: keepPin(seed.pincode, here.pincode) }); };
       };
       // ---- step 3: what the driver needs ----
       const stepDetails = (p) => {

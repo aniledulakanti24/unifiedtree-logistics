@@ -1,60 +1,15 @@
 // Pieces shared by the dashboard pages: wallet top-up, payment choice, filter chips,
 // status pills, empty scenes and the two small chart types.
-import { api, esc, money, store, toast, modal, refreshCounts, inrHint, date } from '../core.js';
+import { api, esc, money, store, toast, modal, refreshCounts, date } from '../core.js';
 import { duo, scene } from './art.js';
 import { popover } from './prefs.js';
-import { isPhone, intentPanel } from './upi.js';
 
 export const refresh = () => { refreshCounts().catch(() => {}); window.dispatchEvent(new CustomEvent('ut:refresh')); };
 
-// Pseudo QR for the sandbox gateway.
-const fakeQr = (seed) => { let h = 0; for (const c of seed) h = (h * 31 + c.charCodeAt(0)) >>> 0; let out = ''; for (let y = 0; y < 21; y++) for (let x = 0; x < 21; x++) { const corner = (x < 7 && y < 7) || (x > 13 && y < 7) || (x < 7 && y > 13); h = (h * 1664525 + 1013904223) >>> 0; const on = corner ? (x % 6 === 0 || y % 6 === 0 || ((x % 14) > 1 && (x % 14) < 5 && (y % 14) > 1 && (y % 14) < 5)) : (h >> 16) & 1; if (on) out += `<rect x="${x}" y="${y}" width="1" height="1"/>`; } return `<svg class="qr" viewBox="0 0 21 21" aria-label="Sandbox payment code">${out}</svg>`; };
 
-// Add money through the sandbox gateway. No card details are ever asked for.
-export function addMoney(prefill = 1000, why, start = 'upi') {
-  const presets = [500, 1000, 2000, 5000, 10000];
-  return modal({
-    title: 'Add money to wallet',
-    body: `${why ? `<p class="callout">${esc(why)}</p>` : ''}
-      <div class="row">${presets.map((a) => `<button class="btn btn-outline btn-sm" type="button" data-amt="${a}">₹${a.toLocaleString('en-IN')}</button>`).join('')}</div>
-      <label class="field">Amount (₹)<input class="input" id="amt" inputmode="numeric" value="${Math.max(100, Math.ceil(prefill))}"></label>
-      <p class="muted small notop" id="amtFx"></p>
-      <div class="pay2 pay4" role="radiogroup" aria-label="Payment method">${[['upi', 'UPI'], ['qr', 'Scan QR'], ['card', 'Card'], ['netbanking', 'Netbanking'], ['giftcard', 'Gift card']].map(([v, l]) => `<label class="pay"><input type="radio" name="m" value="${v}" ${v === start ? 'checked' : ''}><span><b>${l}</b></span></label>`).join('')}</div>
-      <div id="gcBox" hidden><label class="field">Gift card code<input class="input mono" id="gcCode" placeholder="e.g. UTGC-2026-DEMO-0500" autocomplete="off" style="text-transform:uppercase"></label><p class="muted small notop">The card's full value goes into your wallet. Use it for any booking, recharge or bill.</p></div>
-      <p class="muted small notop">Sandbox payment: no real money is taken.</p><p class="form-error" id="amtErr"></p>`,
-    footer: '<button class="btn btn-outline" data-close>Cancel</button><button class="btn btn-primary" id="amtGo">Continue</button>',
-    onMount(el, close) {
-      const input = el.querySelector('#amt');
-      const fx = () => { el.querySelector('#amtFx').textContent = inrHint(input.value.replace(/\D/g, '')); };
-      input.addEventListener('input', fx); fx();
-      // Gift card: no amount to pick, the code decides it.
-      const amtBits = [el.querySelector('.row'), input.closest('.field'), el.querySelector('#amtFx')];
-      const mode = () => { const gc = el.querySelector('[name=m]:checked').value === 'giftcard'; el.querySelector('#gcBox').hidden = !gc; amtBits.forEach((x) => { if (x) x.hidden = gc; }); el.querySelector('#amtGo').textContent = gc ? 'Redeem' : 'Continue'; if (gc) el.querySelector('#gcCode').focus(); };
-      el.addEventListener('change', (e) => { if (e.target.name === 'm') mode(); }); mode();
-      el.addEventListener('click', (e) => { const b = e.target.closest('[data-amt]'); if (b) { input.value = b.dataset.amt; fx(); } });
-      el.querySelector('#amtGo').addEventListener('click', async () => {
-        try {
-          const method = el.querySelector('[name=m]:checked').value;
-          if (method === 'giftcard') {
-            const r = await api('/hub/wallet/redeem', { method: 'POST', body: { code: el.querySelector('#gcCode').value } });
-            toast(`${money(r.amount)} added from your gift card`); refresh(); close(true); return;
-          }
-          const p = await api('/hub/payments/intent', { method: 'POST', body: { amount: Number(input.value.replace(/\D/g, '')), method } });
-          const label = { upi: 'Approve the request in your UPI app', qr: 'Scan this code with any UPI app', card: 'Confirm on your sandbox card', netbanking: 'Complete the payment on your bank page' }[method];
-          if (method === 'upi' && isPhone()) el.querySelector('.modal__body').innerHTML = `${intentPanel({ amount: p.amount, ref: p.id })}<p class="callout">Sandbox: nothing is charged. Choose how this test payment ends.</p><p class="form-error" id="gErr"></p>`;
-          else el.querySelector('.modal__body').innerHTML = `<div class="gateway">${method === 'qr' ? fakeQr(p.id) : '<span class="spinner"></span>'}<b translate="no">${esc(money(p.amount))}</b><p>${esc(label)}</p><small class="muted mono">${esc(p.id)}</small></div><p class="callout">Sandbox: choose how this test payment ends.</p><p class="form-error" id="gErr"></p>`;
-          el.querySelector('.modal__foot').innerHTML = '<button class="btn btn-outline" id="gFail">Simulate failure</button><button class="btn btn-primary" id="gOk">Simulate success</button>';
-          const finish = async (result) => {
-            try { await api('/hub/payments/confirm', { method: 'POST', body: { id: p.id, result } }); if (result === 'success') { toast('Money added to your wallet'); refresh(); close(true); } else { toast('Payment failed. Nothing was charged.', true); close(false); } }
-            catch (err) { el.querySelector('#gErr').textContent = err.message; }
-          };
-          el.querySelector('#gOk').addEventListener('click', () => finish('success'));
-          el.querySelector('#gFail').addEventListener('click', () => finish('failed'));
-        } catch (err) { el.querySelector('#amtErr').textContent = err.message; }
-      });
-    },
-  });
-}
+// Add money: the top-up window lives in wallet-topup.js.
+import { addMoney } from './wallet-topup.js';
+export { addMoney };
 
 // Asks the owner to approve a payment above this person's limit.
 function requestApproval(amount) {
@@ -78,9 +33,11 @@ export async function withFunds(run) {
   }
 }
 
-export const payChoice = (name, { later = 'Pay on delivery', laterHint = 'Pay in cash when the service is done', allowLater = true, value = 'prepaid' } = {}) => `
+// Every payment goes through the UT Log wallet; top up at checkout if the balance is short.
+const walletHint = () => { const c = store.state.counts; return c && c.wallet_balance != null ? `Balance ${money(c.wallet_balance)} · top up at checkout if short` : 'Top up at checkout if short'; };
+export const payChoice = (name, { later = 'Pay later', laterHint = 'Pay when you use the service', allowLater = false, value = 'prepaid' } = {}) => `
   <div class="pay2" role="radiogroup" aria-label="Payment">
-    <label class="pay"><input type="radio" name="${name}" value="prepaid" ${value === 'prepaid' ? 'checked' : ''}>${duo('wallet').value}<span><b>Pay online</b><small>UPI, card, wallet and more</small></span></label>
+    <label class="pay"><input type="radio" name="${name}" value="prepaid" ${value === 'prepaid' ? 'checked' : ''}>${duo('wallet').value}<span><b>Pay from wallet</b><small>${walletHint()}</small></span></label>
     ${allowLater ? `<label class="pay"><input type="radio" name="${name}" value="cod" ${value === 'cod' ? 'checked' : ''}>${duo('cash').value}<span><b>${esc(later)}</b><small>${esc(laterHint)}</small></span></label>` : ''}
   </div>`;
 
@@ -138,7 +95,8 @@ export const TAG_TONE = { 'Your rule': 'green', Recommended: 'green', Cheapest: 
 export const tagBadges = (tags = []) => tags.map((t) => `<span class="badge badge-${TAG_TONE[t] || ''}">${esc(t)}</span>`).join('');
 export const star = (r) => `<span class="rating" title="Rating ${r} out of 5"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 2.500 3 6.100 6.700 1-4.900 4.700 1.200 6.700-6-3.200-6 3.200 1.200-6.700L2.300 9.600l6.700-1z"/></svg>${Number(r).toFixed(1)}</span>`;
 
-const PILL = { new: ['blue', 'New'], assigned: ['amber', 'Assigned'], transit: ['amber', 'In transit'], delivered: ['green', 'Completed'], cancelled: ['', 'Cancelled'] };
+// By meaning: waiting = amber, moving = blue, done = green, cancelled = red.
+const PILL = { new: ['amber', 'New'], assigned: ['amber', 'Assigned'], transit: ['blue', 'In transit'], delivered: ['green', 'Completed'], cancelled: ['red', 'Cancelled'] };
 export function statusPill(r) { const [tone, fallback] = PILL[r.group] || ['', r.status]; return `<span class="badge ${tone ? 'badge-' + tone : ''}">${esc(r.group === 'cancelled' ? 'Cancelled' : r.label || fallback)}</span>`; }
 
 export function emptyScene(text, cta, art = 'delivery') {

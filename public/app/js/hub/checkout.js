@@ -1,4 +1,5 @@
 // Choose how to pay. Everything except the wallet runs on the sandbox gateway.
+import { walletStrip } from './wallet-checkout.js';
 import { api, esc, money, modal, toast, store } from '../core.js';
 import { duo } from './art.js';
 import { addInstrument, payCatalog, TYPES } from './instruments.js';
@@ -9,7 +10,8 @@ const METHODS = [['wallet', 'Wallet', 'Your UT Log balance', 'wallet'], ['upi', 
 const NO_CARD = ['card', 'emi', 'paylater', 'giftcard'];
 
 export const BOOKING_PAY = ['wallet', 'upi', 'card'];
-export const payMethods = ({ card = true, only = null } = {}) => { const business = store.state.accountType === 'business'; return `<div class="field full"><span>Pay with</span><div class="pay2 pay4" role="radiogroup" aria-label="Payment method">${METHODS.filter(([k]) => (only ? only.includes(k) : (card || !NO_CARD.includes(k)) && (business || k !== 'neft'))).map(([k, l, s, i], n) => `<label class="pay"><input type="radio" name="pm" value="${k}" ${n ? '' : 'checked'}>${duo(i).value}<span><b>${l}</b><small>${s}</small></span></label>`).join('')}</div></div>`; };
+// Every service pays from the UT Log wallet now: the old method picker shows the wallet strip instead.
+export const payMethods = () => walletStrip();
 
 const qr = (seed) => { let h = 0; for (const c of seed) h = (h * 31 + c.charCodeAt(0)) >>> 0; let out = ''; for (let y = 0; y < 21; y++) for (let x = 0; x < 21; x++) { h = (h * 1664525 + 1013904223) >>> 0; const corner = (x < 7 && y < 7) || (x > 13 && y < 7) || (x < 7 && y > 13); if (corner ? (x % 6 === 0 || y % 6 === 0 || ((x % 14) > 1 && (x % 14) < 5 && (y % 14) > 1 && (y % 14) < 5)) : (h >> 16) & 1) out += `<rect x="${x}" y="${y}" width="1" height="1"/>`; } return `<svg class="qr" viewBox="0 0 21 21" aria-label="Sandbox payment code">${out}</svg>`; };
 

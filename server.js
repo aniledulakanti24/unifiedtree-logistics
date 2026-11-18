@@ -248,6 +248,10 @@ const bookingCtx = require('./server/booking-api')(routes, { send, authUser }, s
 // Partner (driver) app: sign-up, trips and payouts. Tracked data is restored by store.load() below.
 require('./server/partner-api')(routes, { send, authUser }, bookingCtx);
 const hubCtx = require('./server/hub-api')(routes, { send }, sellerCtx, bookingCtx);
+require('./server/website-api')(routes, { send }, sellerCtx, bookingCtx, hubCtx);
+require('./server/home-api')(routes, { send }, sellerCtx, hubCtx);
+require('./server/wallet-api')(routes, { send }, sellerCtx, hubCtx);
+require('./server/insights-api')(routes, { send }, sellerCtx, hubCtx);
 const bizCtx = require('./server/business-api')(routes, { send }, sellerCtx, bookingCtx, hubCtx);
 require('./server/orders-api')(routes, { send, users }, sellerCtx, bookingCtx, hubCtx, bizCtx);
 require('./server/parity-api')(routes, { send, users }, sellerCtx, bookingCtx, hubCtx, bizCtx);

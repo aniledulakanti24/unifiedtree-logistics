@@ -69,6 +69,7 @@ const DUO = {
   school: A('M12 3 1.500 8.500 12 14l10.500-5.500z') + B('M5.500 12.500V17c1.800 1.700 4 2.500 6.500 2.500s4.700-.8 6.500-2.500v-4.500L12 16z'),
   heart: A('M12 21.500C5 16 2 12.300 2 8.300 2 5.200 4.400 3 7.200 3c1.900 0 3.700 1 4.800 2.700C13.100 4 14.900 3 16.800 3 19.600 3 22 5.200 22 8.300c0 4-3 7.700-10 13.200z'),
   train: A('M5 4.500A3 3 0 0 1 8 1.500h8a3 3 0 0 1 3 3V16a3 3 0 0 1-3 3H8a3 3 0 0 1-3-3z') + B('M7.200 4.500h9.600v6H7.200z') + `<circle class="b" cx="8.800" cy="14.500" r="1.400"/><circle class="b" cx="15.200" cy="14.500" r="1.400"/>` + A('m7.500 19-2.500 3.500h2.400l1.300-2zM16.500 19l2.500 3.500h-2.400l-1.300-2z'),
+  cart: A('M1.500 3.200A1 1 0 0 1 2.500 2.200h2.300a1.500 1.500 0 0 1 1.500 1.200L6.600 5h13.900a1 1 0 0 1 1 1.200l-1.600 8a1.500 1.500 0 0 1-1.500 1.200H8.300l.3 1.500h10a1 1 0 0 1 0 2H7.800a1.500 1.500 0 0 1-1.500-1.200L4 4.200H2.500a1 1 0 0 1-1-1z') + B('M9 8h9.500l-.900 4.500H9.900z') + circA(8.800, 21, 1.600) + circA(17.800, 21, 1.600),
 };
 
 // Named icon. Colour comes from the surrounding --a / --b.
@@ -142,6 +143,9 @@ export const scene = (name) => raw(SCENES[name] || '');
 const PNG = { bike: 'scooter', scooter: 'scooter', bike2: 'bike', auto: 'auto', mini: 'mini', pickup8: 'mini', truck14: 'truck14', truck19: 'truck14', container32: 'container32', trailer40: 'trailer40' };
 export const vehicleImg = (key) => {
   if (PNG[key]) return `/assets/vehicles-png/${PNG[key]}.png`;
+  // The app's own full-colour plane and ship (the public site keeps its line drawings).
+  if (['air', 'plane'].includes(key)) return '/app/img/plane.svg';
+  if (key === 'ship') return '/app/img/ship.svg';
   const file = { parcel: 'parcel', ptl: 'ptl', air: 'plane', plane: 'plane', ship: 'ship' }[key] || key;
   return `/assets/vehicles/${file}.svg`;
 };

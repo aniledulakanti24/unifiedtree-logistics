@@ -42,6 +42,8 @@ import * as profile from './hub/profile.js';
 const insights = lazy(() => import('./hub/insights.js'));
 const business = lazy(() => import('./hub/business.js'));
 const hubOrders = lazy(() => import('./hub/orders.js'));
+const newOrder = lazy(() => import('./hub/neworder.js'));
+const bookPay = lazy(() => import('./hub/bookpay.js'));
 const hubWeight = lazy(() => import('./hub/weight.js'));
 const hubHelp = lazy(() => import('./hub/help.js'));
 const accessPage = lazy(() => import('./hub/access.js'));
@@ -50,7 +52,7 @@ const intel = lazy(() => import('./hub/intel.js'));
 const control = lazy(() => import('./hub/control.js'));
 import { setupApp, maybeTour } from './hub/experience.js';
 import { installSmoothScroll, watchView, resetScroll, progressStart, progressDone } from './hub/motion.js';
-import { duo, scene } from './hub/art.js';
+import { duo, scene, tile } from './hub/art.js';
 import { addMoney } from './hub/ui.js';
 import * as ws from './hub/workspace.js';
 import { maybeOffer, install, canInstall } from './hub/install.js';
@@ -67,14 +69,18 @@ import { icon } from './hub/icons.js';
 import { openAsk } from './hub/ask.js';
 import { popover } from './hub/prefs.js';
 import { startTour } from './hub/experience.js';
+const NEW_FLOW = ['vehicle', 'courier', 'logistics', 'international'];
 const section = (key) => [
   [key, (v, p) => transport.render(v, { ...p, section: key, tab: 'dashboard' })],
-  [`${key}/book`, (v, p) => transport.render(v, { ...p, section: key, tab: 'book' })],
+  [`${key}/book`, (v, p) => (NEW_FLOW.includes(key) ? location.replace(`#/new-order?type=${key}`) : transport.render(v, { ...p, section: key, tab: 'book' }))],
   ...['orders', 'returns', 'cancellations', 'analytics', 'tower', 'settings'].map((tab) => [`${key}/${tab}`, (v, p) => transport.render(v, { ...p, section: key, tab })]),
 ];
 const ROUTES = [
   ['home', dashboard.render],
+  ['new-order', newOrder.render],
+  ['book-pay', bookPay.render],
   ['workspace', ws.render],
+  ['website', () => { location.replace('#/my/orders?section=website'); }],
   ...['vehicle', 'courier', 'logistics', 'international'].flatMap(section),
   ['courier/bulk', (v, p) => transport.render(v, { ...p, section: 'courier', tab: 'bulk' })],
   ['bookings', (v, { query }) => { location.replace(`#/my/orders?scope=all&days=${query.get('days') || ''}${query.get('search') ? `&search=${encodeURIComponent(query.get('search'))}` : ''}`); }],
@@ -147,23 +153,16 @@ async function route() {
 
 // ---- sidebar -----------------------------------------------------------------
 const NAV = [
-  { key: 'home', label: 'Overview', icon: 'dashboard', path: '#/home' },
-  { group: 'Ship' },
-  { key: 'vehicle', label: 'Vehicle Transport', icon: 'bike', path: '#/vehicle', mod: 'booking', match: '^vehicle' },
-  { key: 'courier', label: 'Courier Transport', icon: 'parcel', path: '#/courier', mod: 'booking', match: '^courier' },
-  { key: 'logistics', label: 'Logistics Transport', icon: 'truck', path: '#/logistics', mod: 'booking', match: '^logistics' },
-  { key: 'international', label: 'International', icon: 'globe', path: '#/international', mod: 'booking', match: '^international' },
-  { key: 'services', label: 'More Services', icon: 'building', path: '#/services/dashboard', mod: 'booking', match: '^services/' },
+  { key: 'home', label: 'Dashboard', icon: 'dashboard', path: '#/home' },
+  { group: 'Book & pay' },
+  { key: 'pay', label: 'Travel & Bills', icon: 'ticket', path: '#/book-pay', mod: 'travel', anyOf: ['travel', 'pay'], match: '^(book-pay|travel/|rides|pay/|autopay|recharge)', alts: [['travel', '#/book-pay'], ['recharge', '#/book-pay'], ['autopay', '#/book-pay'], ['bizpay', '#/book-pay']] },
+  { key: 'wallet', label: 'Wallet', icon: 'wallet', path: '#/wallet', mod: 'wallet', match: '^(wallet|rewards|insights)', alts: [['wallet', '#/wallet'], ['rewards', '#/rewards'], ['insights', '#/insights']] },
   { group: 'Manage' },
-  { key: 'my-orders', label: 'All Orders', icon: 'box2', path: '#/my/orders', mod: 'orders', match: '^(my/orders|bookings)' },
+  { key: 'my-orders', label: 'All Orders', icon: 'box2', path: '#/my/orders', mod: 'orders', match: '^(my/orders|bookings|new-order|vehicle|courier|logistics|international|services/)' },
   { key: 'my-returns', label: 'All Returns', icon: 'returnbox', path: '#/my/returns', mod: 'returns', match: '^my/returns' },
   { key: 'my-weight', label: 'Weight Management', icon: 'scale', path: '#/my/weight', mod: 'weight', match: '^my/weight' },
   { key: 'intel', label: 'Courier Intelligence', icon: 'radar', path: '#/intel', mod: 'orders', match: '^intel' },
   { key: 'holidays', label: 'Partner Holidays', icon: 'calendar', path: '#/holidays', mod: 'holidays', match: '^holidays' },
-  { group: 'Book & pay' },
-  { key: 'travel', label: 'Travel & Stay', icon: 'plane', path: '#/travel/dashboard', mod: 'travel', match: '^(travel/|rides)' },
-  { key: 'pay', label: 'Recharge & Bills', icon: 'phone', path: '#/pay/dashboard', mod: 'recharge', match: '^(pay/|autopay)', alts: [['recharge', '#/pay/dashboard'], ['autopay', '#/autopay'], ['bizpay', '#/pay/business']] },
-  { key: 'wallet', label: 'Wallet', icon: 'wallet', path: '#/wallet', mod: 'wallet', match: '^(wallet|rewards|insights)', alts: [['wallet', '#/wallet'], ['rewards', '#/rewards'], ['insights', '#/insights']] },
   { group: 'Business', business: true },
   { key: 'b-track', label: 'Live Tracking', icon: 'radar', path: '#/business/tracking', mod: 'tracking', business: true, match: '^business/tracking' },
   { key: 'b-wa', label: 'WhatsApp', icon: 'whatsapp', path: '#/business/whatsapp', mod: 'whatsapp', business: true, match: '^business/whatsapp' },
@@ -201,7 +200,7 @@ function renderNav() {
   const { menu } = store.state;
   // A section with tabs stays in the sidebar if the role can open any one of them.
   const resolved = NAV.map((n) => { const hit = n.alts && n.alts.find(([m]) => can(m)); return hit ? { ...n, mod: hit[0], path: hit[1] } : n; });
-  const visible = resolved.filter((n) => (!n.business || isBusiness()) && (!n.owner || isOwner()) && (!n.mod || can(n.mod)) && (n.group || ws.navOn(n.key)));
+  const visible = resolved.filter((n) => (!n.business || isBusiness()) && (!n.owner || isOwner()) && (!n.mod || can(n.mod)) && (n.group || (n.anyOf ? n.anyOf.some((m) => ws.modOn(m)) : ws.navOn(n.key))));
   // Drop group headings with nothing under them.
   const items = visible.filter((n, i) => !n.group || (visible[i + 1] && !visible[i + 1].group));
   const favs = readFavs().map((k) => visible.find((n) => n.key === k)).filter(Boolean);
@@ -275,12 +274,43 @@ sideNav.addEventListener('click', (e) => {
   renderNav();
 });
 document.getElementById('askBtn').addEventListener('click', openAsk);
-const NEW_ITEMS = [['Ship', [['bike', 'Vehicle booking', '#/vehicle/book', 'booking'], ['parcel', 'Courier shipment', '#/courier/book', 'booking'], ['truck', 'Truck load', '#/logistics/book', 'booking'], ['globe', 'International shipment', '#/international/book', 'booking'], ['building', 'Movers or warehousing', '#/services/movers', 'booking']]], ['Book', [['plane', 'Flight', '#/travel/flights', 'travel'], ['building', 'Hotel or stay', '#/travel/hotels', 'travel'], ['map', 'Local ride', '#/rides', 'travel']]], ['Pay', [['phone', 'Mobile recharge', '#/pay/mobile', 'recharge'], ['receipt', 'Pay a bill', '#/pay/bills', 'recharge'], ['rupee', 'Send money', '#/pay/send', 'recharge'], ['returnbox', 'Return for an order', '#/my/returns', 'returns']]]];
+const NEW_ITEMS = [
+  ['Ship', [['parcel', 'amber', 'Send a parcel', 'Courier by pincode', '#/new-order?type=courier', 'booking'], ['bike', 'green', 'Book a vehicle', 'Bike, auto or van in town', '#/new-order?type=vehicle', 'booking'], ['truck', 'blue', 'Truck load', 'Full trucks between cities', '#/new-order?type=logistics', 'booking'], ['globe', 'violet', 'International', 'Ship abroad', '#/international/book', 'booking'], ['building', 'rose', 'Movers & storage', 'Packers, warehousing', '#/services/movers', 'booking']]],
+  ['Travel', [['plane', 'blue', 'Flight', 'Every airline', '#/travel/flights', 'travel'], ['train', 'green', 'Train', 'Tickets and PNR', '#/travel/trains', 'travel'], ['hotel', 'violet', 'Hotel', 'Rooms and stays', '#/travel/hotels', 'travel'], ['ride', 'amber', 'Local ride', 'Cab, auto, bike', '#/rides', 'travel']]],
+  ['Pay', [['phone', 'green', 'Recharge', 'Mobile and DTH', '#/pay/mobile', 'recharge'], ['bill', 'amber', 'Pay a bill', '41 bill types', '#/book-pay', 'recharge'], ['fastag', 'coral', 'FASTag', 'Top up a tag', '#/pay/fastag', 'recharge'], ['rupee', 'blue', 'Send money', 'UPI or bank', '#/pay/send', 'recharge']]],
+];
+// Big tiles across the top of the menu: the things people start most.
+const NEW_TOP = [['parcel', 'amber', 'Send parcel', '#/new-order?type=courier', 'booking'], ['bike', 'green', 'Vehicle', '#/new-order?type=vehicle', 'booking'], ['truck', 'blue', 'Truck load', '#/new-order?type=logistics', 'booking'], ['cart', 'green', 'Store orders', '#/my/orders?section=website', 'booking'], ['radar', 'blue', 'Track', '#/my/orders?scope=all&group=transit', 'booking']];
+const NEW_FOOT = [['returnbox', 'Start a return', '#/my/returns', 'returns'], ['receipt', 'All orders', '#/my/orders', 'booking']];
 document.getElementById('newBtn').addEventListener('click', (e) => {
-  const groups = NEW_ITEMS.map(([g, list]) => [g, list.filter((x) => can(x[3]) && ws.pathOn(x[2]))]).filter(([, l]) => l.length);
-  popover(e.currentTarget, `<div class="menu-list">${groups.map(([g, l]) => `<p class="menu-head">${g}</p>${l.map(([i, t, h]) => `<a href="${h}">${icon(i, 16)}${esc(t)}</a>`).join('')}`).join('')}${can('wallet') ? `<div class="menu-sep"></div><button type="button" data-add-money>${icon('wallet', 16)}Add money to wallet</button>` : ''}</div>`, (el, close) => {
-    el.addEventListener('click', (x) => { if (x.target.closest('a')) close(); if (x.target.closest('[data-add-money]')) { close(); addMoney().then((ok) => { if (ok) route(); }); } });
+  const btn = e.currentTarget;
+  const top = NEW_TOP.filter((x) => can(x[4]) && ws.pathOn(x[3]));
+  const topPaths = top.map((x) => x[3]);
+  const groups = NEW_ITEMS.map(([g, list]) => [g, list.filter((x) => can(x[5]) && ws.pathOn(x[4]) && !topPaths.includes(x[4]))]).filter(([, l]) => l.length);
+  const foot = NEW_FOOT.filter((x) => can(x[3]));
+  btn.setAttribute('aria-expanded', 'true');
+  popover(btn, `<div class="qa qa--new">
+    <div class="qa-h"><div><b>Create new</b><small>Ship, book or pay in one tap</small></div><kbd title="Keyboard shortcut">N</kbd></div>
+    <label class="qa-find">${icon('search', 15)}<input type="search" id="qaFind" placeholder="Find an action, e.g. flight or truck" aria-label="Find an action" autocomplete="off"></label>
+    ${top.length ? `<div class="qa-top" data-sec>${top.map(([i, tone, t, h]) => `<a class="qa-t" href="${h}" data-find="${esc(t.toLowerCase())}">${tile(i, tone).value}<span>${esc(t)}</span></a>`).join('')}</div>` : ''}
+    ${groups.map(([g, l]) => `<div data-sec><p class="qa-g">${g}</p><div class="qa-grid">${l.map(([i, tone, t, sub, h]) => `<a class="qa-c" href="${h}" data-find="${esc(`${t} ${sub} ${g}`.toLowerCase())}">${tile(i, tone).value}<span><b>${esc(t)}</b><small>${esc(sub)}</small></span>${icon('chevron', 14)}</a>`).join('')}</div></div>`).join('')}
+    <p class="qa-none" id="qaNone" hidden>No action matches. Try the search on the dashboard.</p>
+    <div class="qa-foot">${can('wallet') ? `<button type="button" class="qa-money" data-add-money>${icon('wallet', 15)}Add money</button>` : ''}${foot.map(([i, t, h]) => `<a href="${h}">${icon(i, 15)}${esc(t)}</a>`).join('')}</div></div>`, (el, close) => {
+    const done = () => { btn.setAttribute('aria-expanded', 'false'); close(); };
+    el.addEventListener('click', (x) => { if (x.target.closest('a')) done(); if (x.target.closest('[data-add-money]')) { done(); addMoney().then((ok) => { if (ok) route(); }); } });
+    // Type to narrow the list; Enter opens the first match.
+    const find = el.querySelector('#qaFind');
+    find.addEventListener('input', () => {
+      const q = find.value.trim().toLowerCase();
+      el.querySelectorAll('[data-find]').forEach((a) => { a.hidden = !!q && !a.dataset.find.includes(q); });
+      el.querySelectorAll('[data-sec]').forEach((s) => { s.hidden = ![...s.querySelectorAll('[data-find]')].some((a) => !a.hidden); });
+      el.querySelector('#qaNone').hidden = !q || [...el.querySelectorAll('[data-find]')].some((a) => !a.hidden);
+    });
+    find.addEventListener('keydown', (x) => { if (x.key === 'Enter') { const first = [...el.querySelectorAll('[data-find]')].find((a) => !a.hidden); if (first) { x.preventDefault(); first.click(); } } });
+    setTimeout(() => find.focus({ preventScroll: true }), 30);
   });
+  // The popover closes itself on outside clicks too: reset the button once it is gone.
+  const watch = setInterval(() => { if (!document.querySelector('.qa--new')) { btn.setAttribute('aria-expanded', 'false'); clearInterval(watch); } }, 300);
 });
 document.getElementById('helpBtn').addEventListener('click', (e) => {
   popover(e.currentTarget, `<div class="menu-list"><a href="#/help">${icon('help', 16)}Help centre</a><a href="#/support?new=1">${icon('chat', 16)}Contact support</a>${canInstall() ? `<button type="button" data-install>${icon('phone', 16)}Install the app</button>` : ''}<a href="#/shortcuts">${icon('keyboard', 16)}Keyboard shortcuts<small>?</small></a><button type="button" data-tour>${icon('rocket', 16)}Take the tour</button><div class="menu-sep"></div><a href="#/feedback">${icon('star', 16)}Send feedback</a></div>`, (el, close) => {
@@ -354,6 +384,7 @@ const fixMenu = (data) => { data.forEach((m) => (m.children || []).forEach((c) =
     loadCounts();
     await route();
     bootDone();
+    import('./hub/otp-float.js').then((m) => m.installOtpFloat()).catch(() => {}); // floating OTP card for active orders
     prefetch();
     maybeOffer();
     if (!p.account_type && user.role === 'owner') {

@@ -137,7 +137,8 @@ module.exports = function register(routes, { send, users }, ctx, engine, hubCtx,
     const amount = Math.round(Number(body.amount));
     if (!(amount >= 100 && amount <= 100000)) throw oops(400, 'Add between ₹100 and ₹1,00,000.');
     if (!['upi', 'qr', 'netbanking', 'card'].includes(body.method)) throw oops(400, 'Pick a payment method.');
-    const p = { id: newId('PAY'), amount, method: body.method, status: 'PENDING', at: iso(Date.now()) };
+    const inst = (h.instruments || []).find((x) => x.id === body.instrument_id);
+    const p = { id: newId('PAY'), amount, method: body.method, source: inst ? inst.label : '', instrument_id: inst ? inst.id : '', status: 'PENDING', at: iso(Date.now()) };
     P(h).payments.unshift(p);
     send(res, 200, p);
   });
@@ -146,6 +147,9 @@ module.exports = function register(routes, { send, users }, ctx, engine, hubCtx,
     if (!p) throw oops(404, 'We could not find that payment.');
     if (p.status !== 'PENDING') throw oops(409, 'This payment has already finished.');
     if (body.result === 'success') { p.status = 'SUCCESS'; credit(db, p.amount, `Added by ${p.method.toUpperCase()} (sandbox) · ${p.id}`); } else p.status = 'FAILED';
+    if (!h.topups) h.topups = [];
+    h.topups.unshift({ id: p.id, at: iso(Date.now()), amount: p.amount, kind: 'manual', method: p.method, source: p.source || { upi: 'UPI', qr: 'UPI QR', card: 'Card', netbanking: 'Netbanking' }[p.method] || p.method, status: p.status, balance_after: db.balance });
+    if (h.topups.length > 300) h.topups.length = 300;
     send(res, 200, { ...p, balance: db.balance });
   });
   routes['POST /v1/hub/autopay/pay-due'] = hub(({ res, body, db, h }) => {

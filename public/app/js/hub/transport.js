@@ -1,12 +1,13 @@
 // Vehicle, Courier, Logistics and International: each has its own dashboard, a booking
 // flow (location or pincode → weight → optional size → recommendations), and orders.
-import { api, esc, money, store, toast, modal, withBusy, dateTime, date, formData, inrHint } from '../core.js';
+import { api, esc, money, store, toast, modal, withBusy, dateTime, date, formData, inrHint, refreshCounts } from '../core.js';
 import { duo, tile, scene, vehicleImg } from './art.js';
-import { sortChips, tagBadges, star, payChoice, withFunds, refresh, mountDeals, filterBtn, openFilters, countActive } from './ui.js';
+import { sortChips, tagBadges, star, payChoice, withFunds, refresh, mountDeals, filterBtn, openFilters, countActive, addMoney } from './ui.js';
 import { openTracking } from './tracking.js';
 import { smoothTo } from './motion.js';
 import { deskTabs, renderDeskBody } from './desk.js';
-import { payMethods, checkout, PAY_LABEL, BOOKING_PAY } from './checkout.js';
+import { payMethods, PAY_LABEL, BOOKING_PAY } from './checkout.js';
+import { walletCheckout, walletStrip } from './wallet-checkout.js';
 import { openPlacePicker, placeChips, samePlace } from './places.js';
 import { icon } from './icons.js';
 
@@ -18,7 +19,6 @@ export const SECTIONS = {
 };
 const SAMPLES = { vehicle: { from: 'Koramangala, Bengaluru', to: 'Whitefield, Bengaluru', weight: '12' }, courier: { from: '560034', to: '400053', weight: '2' }, logistics: { from: 'Pune', to: 'Hyderabad', weight: '1200' }, international: { from: '560034', country: 'United Arab Emirates', weight: '5' } };
 const SHORT_SORTS = [['best', 'Best'], ['fast', 'Fastest'], ['low', 'Cheapest'], ['rating', 'Top rated']];
-const EXTRAS = [['fragile', 'Fragile handling', 49], ['packaging', 'Premium packaging', 99], ['priority', 'Priority pickup', 79]];
 const memory = {}; // per section: the last form and results, kept across tabs and currency changes
 window.addEventListener('ut:desk-settings', (e) => { delete memory[e.detail]; });
 let meta = null;
@@ -83,7 +83,7 @@ async function bookForm(body, section, query) {
           <label class="field"><span class="req">Weight (kg)</span><span class="with-ico">${duo('scale', 'sm').value}<input class="input" name="weight" inputmode="decimal" value="${esc(f.weight || '')}" placeholder="Total weight"></span></label>
           <label class="field">Package type<span class="with-ico">${duo('box2', 'sm').value}<select class="select" name="category">${m.categories.map((c) => `<option ${f.category === c ? 'selected' : ''}>${esc(c)}</option>`).join('')}</select></span></label>
           <div class="field full"><span>Size in cm (optional)</span><div class="dims">${duo('ruler', 'sm').value}${[['length', 'Length'], ['breadth', 'Width'], ['height', 'Height']].map(([k, l]) => `<input class="input" name="${k}" inputmode="decimal" value="${esc(f[k] || '')}" placeholder="${l}" aria-label="${l} in cm">`).join('')}</div></div>
-          <div class="field full"><span class="req">Pay for shipping</span>${payChoice('pay_mode', { value: f.pay_mode || 'prepaid' })}</div>
+          <input type="hidden" name="pay_mode" value="prepaid"><div class="field full"><span>Pay for shipping</span>${walletStrip()}</div>
         </div>
         <details class="more" ${f.more ? 'open' : ''}><summary>More options<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></summary><div class="form-grid more__b">
           <div class="field"><span>Pickup</span><div class="seg" id="when" role="group"><button type="button" data-w="now" aria-pressed="${mem.when !== 'later'}">Now</button><button type="button" data-w="later" aria-pressed="${mem.when === 'later'}">Schedule</button></div></div>
@@ -285,7 +285,47 @@ async function bookForm(body, section, query) {
   return () => { clearTimeout(timer); clearTimeout(placedTimer); };
 }
 
-function confirmBooking(section, mem, form) {
+// Bookings are paid from the UT Log wallet; coupons and reward points still apply. A short
+// balance asks to add money when you press Pay and book.
+function walletPay() {
+  const bal = store.state.counts && store.state.counts.wallet_balance;
+  return `<div class="field full"><span>Pay with</span><div class="wpay"><span class="wpay__ico">${icon('wallet', 20)}</span><div class="grow"><b>UT Log wallet</b><small>${bal != null ? `Balance <b translate="no">${esc(money(bal))}</b>` : 'Your UT Log balance'}</small></div><button class="btn btn-outline btn-sm" type="button" data-add-money>Add money</button></div>
+    <p class="pay-hint">Have a gift card? <button class="link" type="button" data-gc>Add it to your wallet</button>.</p></div>`;
+}
+// New order already has the addresses, contacts and load, so booking goes straight to the wallet
+// checkout. Falls back to the confirm form only when a name or mobile number is missing.
+export function quickBook(section, mem, form) {
+  const q = mem.quote; const o = q.options.find((x) => x.id === mem.selected);
+  const p = store.state.profile || {};
+  const from = mem.form.from_place || {}; const to = mem.form.to_place || {};
+  const fc = from.contact || {}; const tc = to.contact || {};
+  const okPhone = (v) => /^[6-9]\d{9}$/.test(String(v || ''));
+  const name = String(p.name || fc.name || '').trim();
+  const phone = okPhone(p.mobile) ? p.mobile : okPhone(fc.phone) ? fc.phone : '';
+  if (name.length < 2 || !phone) { confirmBooking(section, mem, form); return; }
+  const pickup = mem.form.from_addr || from.address || q.route.from;
+  const drop = mem.form.to_addr || to.address || q.route.to;
+  const book = (x) => api('/hub/transport/book', { method: 'POST', body: { ...x, quote_id: q.quote_id, option_id: o.id, pay_mode: 'prepaid', contact: { name, phone }, pickup_address: pickup, drop_address: drop, pickup_place: mem.form.from_place || null, drop_place: mem.form.to_place || null, company: p.company || '', gstin: p.gstin || '', reference: form.reference.value, receiver: okPhone(tc.phone) ? { name: tc.name || '', phone: tc.phone, consent: false } : undefined } });
+  withBusy(document.getElementById('noGo') || document.createElement('button'), async () => {
+    try {
+      const check = await book({ dry_run: true });
+      const r = await walletCheckout({ amount: check.amount, run: book, info: {
+        title: o.title, payee: o.provider, sub: o.title, img: vehicleImg(o.vehicle), section, coupon: true,
+        icon: { vehicle: 'bike', courier: 'parcel', logistics: 'truck', international: 'globe' }[section] || 'truck', tone: 'green', baseLabel: 'Fare', refLabel: 'Booking reference',
+        route: { from: pickup, to: drop, fromWho: [fc.name, fc.phone].filter(Boolean).join(' · ') || `${name} · ${phone}`, toWho: [tc.name, tc.phone].filter(Boolean).join(' · '), eta: o.eta },
+        facts: [o.capacity, o.rating ? `★ ${Number(o.rating).toFixed(1)}` : '', o.verified ? 'Verified partner' : ''].filter(Boolean),
+        rows: [['Service', o.title], ['Pickup', pickup], ['Drop', drop]],
+      } });
+      if (!r) return;
+      mem.placed = { id: r.id, amount: r.amount, pay_mode: r.pay_mode, pay_via: r.pay_via, provider: o.provider, from: q.route.from, to: q.route.to };
+      mem.quote = null; mem.selected = null;
+      refresh();
+      if (mem.onPlaced) mem.onPlaced();
+    } catch (e) { if (!e.quiet) toast(e.message, true); }
+  });
+}
+
+export function confirmBooking(section, mem, form) {
   const q = mem.quote; const o = q.options.find((x) => x.id === mem.selected);
   const p = store.state.profile || {};
   const business = store.state.accountType === 'business';
@@ -305,10 +345,9 @@ function confirmBooking(section, mem, form) {
         <label class="field">Your name <span class="req" aria-hidden="true"></span><input class="input" name="name" required aria-required="true" autocomplete="name" value="${esc(p.name || (mem.sample ? 'Asha Rao' : ''))}"></label>
         <label class="field">Your mobile number <span class="req" aria-hidden="true"></span><input class="input" name="phone" required aria-required="true" autocomplete="tel-national" inputmode="numeric" maxlength="10" value="${esc((/^[6-9]\d{9}$/.test(p.mobile || '') && p.mobile) || (mem.sample ? '9876500001' : ''))}"></label>
         ${addr('pickup_address', 'Pickup address', mem.form.from_addr || bizAddr || (mem.sample ? '12, 5th Main, Sector 3' : ''))}${addr('drop_address', 'Drop address', mem.form.to_addr || (mem.sample ? '44, Lake View Road, Block B' : ''))}
-        <div class="field full"><span>Add-ons</span><div class="extras">${EXTRAS.map(([k, l, c]) => `<label class="extra"><input type="checkbox" data-extra="${k}" data-cost="${c}"><span><b>${l}</b><small translate="no">+${esc(money(c))}</small></span></label>`).join('')}</div></div>
         ${business ? `<label class="field">Receiver name<input class="input" name="r_name" value="${esc((mem.form.to_place && mem.form.to_place.contact && mem.form.to_place.contact.name) || '')}"></label><label class="field">Receiver mobile<input class="input" name="r_phone" inputmode="numeric" maxlength="10" value="${esc((mem.form.to_place && mem.form.to_place.contact && mem.form.to_place.contact.phone) || '')}"></label><label class="row full"><input type="checkbox" class="check" name="r_consent"> The receiver agreed to get delivery updates on WhatsApp</label>` : ''}
         ${business ? `<label class="field">Company<input class="input" name="company" value="${esc(p.company || '')}"></label><label class="field">GSTIN (optional)<input class="input" name="gstin" maxlength="15" value="${esc(p.gstin || '')}"></label>` : ''}
-      ${pay === 'cod' ? '' : `${payMethods({ only: BOOKING_PAY })}<p class="pay-hint full">Have a gift card? <button class="link" type="button" data-gc>Add it to your wallet</button> and pay with Wallet.</p>`}</form>
+      ${pay === 'cod' ? '' : walletPay()}</form>
       <div id="deals"></div><dl class="break" id="brk"></dl>
       <p class="muted small notop">${esc(o.provider)} carries out this job. UT Log connects you and keeps the record. Demo booking: no real pickup is arranged.</p>
       <p class="form-error" id="cfErr"></p>`,
@@ -323,6 +362,11 @@ function confirmBooking(section, mem, form) {
       const draw = (st) => { lastDeal = st; const ex = extraSum(); const pay_ = o.total + fee + ex - st.discount - st.points; el.querySelector('#brk').innerHTML = row('Service charge', money(o.price)) + (o.insurance ? row('Insurance', money(o.insurance)) : '') + (ex ? row('Add-ons', money(ex)) : '') + (fee ? row('Pay on delivery fee', money(fee)) : '') + (st.discount ? row(`Coupon ${st.coupon}`, '−' + money(st.discount)) : '') + (st.points ? row('Reward points', '−' + money(st.points)) : '') + `<div class="break__t"><dt>${pay === 'cod' ? 'Pay on delivery' : 'Total to pay'}</dt><dd translate="no">${esc(money(pay_))}</dd></div>`; el.querySelector('.confirm__p').textContent = money(pay_); };
       draw({ discount: 0, points: 0 });
       const deals = mountDeals(el.querySelector('#deals'), { section, amount: o.total + fee, onChange: draw });
+      // Top up without leaving the booking; the balance updates in place.
+      el.addEventListener('click', async (e) => {
+        if (!e.target.closest('[data-add-money]')) return;
+        if (await addMoney()) { await refreshCounts().catch(() => {}); refresh(); const b = el.querySelector('.wpay small b'); const bal = store.state.counts && store.state.counts.wallet_balance; if (b && bal != null) b.textContent = money(bal); }
+      });
       const go = el.querySelector('#cfGo');
       go.addEventListener('click', () => withBusy(go, async () => {
         const d = formData(f);
@@ -333,9 +377,12 @@ function confirmBooking(section, mem, form) {
         cfErr.textContent = '';
         try {
           const book = (x) => api('/hub/transport/book', { method: 'POST', body: { ...x, quote_id: q.quote_id, option_id: o.id, pay_mode: pay, contact: { name: d.name, phone: d.phone }, pickup_address: d.pickup_address, drop_address: d.drop_address, pickup_place: mem.form.from_place || null, drop_place: mem.form.to_place || null, company: d.company, gstin: d.gstin, reference: form.reference.value, coupon: deals.coupon, use_points: deals.use_points, extras: [...el.querySelectorAll('[data-extra]:checked')].map((c) => c.dataset.extra), receiver: d.r_phone ? { name: d.r_name, phone: d.r_phone, consent: !!d.r_consent } : undefined } });
-          let extra = {};
-          if (pay !== 'cod') { const check = await book({ dry_run: true }); extra = await checkout(el, check.amount); if (!extra) return; }
-          const r = await withFunds(() => book(extra));
+          let r;
+          if (pay !== 'cod') {
+            const check = await book({ dry_run: true });
+            r = await walletCheckout({ amount: check.amount, run: book, info: { title: o.title, payee: o.provider, sub: `${q.route.from} → ${q.route.to}`, icon: { vehicle: 'bike', courier: 'parcel', logistics: 'truck', international: 'globe' }[section] || 'truck', tone: 'green', baseLabel: 'Fare', refLabel: 'Booking reference', rows: [['Service', o.title], ['Pickup', d.pickup_address || q.route.from], ['Drop', d.drop_address || q.route.to]] } });
+            if (!r) return;
+          } else r = await withFunds(() => book({}));
           close(r);
           mem.placed = { id: r.id, amount: r.amount, pay_mode: r.pay_mode, pay_via: r.pay_via, provider: o.provider, from: q.route.from, to: q.route.to };
           mem.quote = null; mem.selected = null;
@@ -380,5 +427,8 @@ function bulkForm(body) {
   body.querySelector('#go').addEventListener('click', (e) => run(e.currentTarget, false));
 }
 
-export function rebook(r) { memory[r.section] = { form: { ...r.form }, sort: 'best', type: 'all', quote: null, selected: null, compare: [], when: 'now' }; location.hash = `#/${r.section}/book`; }
+export function rebook(r) {
+  // Vehicle, courier and truck orders are booked again in the new order flow, with the load filled in.
+  if (['vehicle', 'courier', 'logistics'].includes(r.section)) { try { sessionStorage.setItem('ut-rebook', JSON.stringify({ type: r.section, form: r.form || {} })); } catch (e) { /* private mode */ } location.hash = `#/new-order?type=${r.section}&fresh=1`; return; }
+  memory[r.section] = { form: { ...r.form }, sort: 'best', type: 'all', quote: null, selected: null, compare: [], when: 'now' }; location.hash = `#/${r.section}/book`; }
 

@@ -22,7 +22,7 @@ export async function analyticsTab(body, key, query) {
   const link = (patch) => { const q = new URLSearchParams({ view, sub, pay, ...toQuery(range), ...patch }); [...q.keys()].forEach((k) => { if (!q.get(k)) q.delete(k); }); return `${c.base}/analytics?${q}`; };
   body.innerHTML = '<div class="skeleton" style="height:300px"></div>';
   const d = await api('/hub/desk/analytics', { query: { desk: key, ...toApi(range), sub, pay } });
-  const fields = [{ key: 'pay', label: 'Payment', options: [['', 'All payments'], ['prepaid', 'Prepaid'], ['cod', 'Pay on delivery']] }];
+  const fields = [];
   const partnerRows = d.providers.map((p) => [p.name, p.orders, money(p.spend), p.delivered, p.cancelled, `${p.success}%`]);
   const routeRows = d.routes.map((r) => [r.name, r.orders, money(r.spend)]);
   const payRows = d.payments.map((p) => [p.name, p.orders, money(p.amount)]);
@@ -81,7 +81,7 @@ export async function settingsTab(body, key, query, partners = []) {
   const s = await api('/hub/desk/settings', { query: { desk: key } });
   const all = [...new Set([...partners, ...s.seen, ...s.blocked])].sort();
   const panes = {
-    defaults: () => `<div class="form-grid"><label class="field">Sort results by<select class="select" name="sort">${SORTS.map(([v, l]) => `<option value="${v}" ${v === s.sort ? 'selected' : ''}>${l}</option>`).join('')}</select></label>${transport ? `<label class="field">Default payment<select class="select" name="pay_mode"><option value="prepaid" ${s.pay_mode === 'prepaid' ? 'selected' : ''}>Pay online</option><option value="cod" ${s.pay_mode === 'cod' ? 'selected' : ''}>Pay on delivery</option></select></label><label class="field full">Default pickup<input class="input" name="pickup" maxlength="80" value="${esc(s.pickup)}" placeholder="Area or pin code filled in on every new booking"></label>` : ''}</div>`,
+    defaults: () => `<div class="form-grid"><label class="field">Sort results by<select class="select" name="sort">${SORTS.map(([v, l]) => `<option value="${v}" ${v === s.sort ? 'selected' : ''}>${l}</option>`).join('')}</select></label>${transport ? `<label class="field full">Default pickup<input class="input" name="pickup" maxlength="80" value="${esc(s.pickup)}" placeholder="Area or pin code filled in on every new booking"></label>` : ''}</div>`,
     partners: () => `<p class="muted notop">Switch off a partner to hide it from your ${esc(c.noun)} results. Partners you have seen in a search appear here.</p><ul class="toggles">${all.map((p) => `<li><b>${esc(p)}</b><label class="switch"><input type="checkbox" data-partner="${esc(p)}" ${s.blocked.includes(p) ? '' : 'checked'} aria-label="Use ${esc(p)}"><i></i></label></li>`).join('')}</ul>`,
     alerts: () => `<p class="muted notop">These limits decide what appears in Control Tower.</p><div class="form-grid"><label class="field">Mark as delayed after (hours past promise)<input class="input" name="delay_hours" inputmode="numeric" value="${s.delay_hours}"></label><label class="field">Mark as stuck after (hours without pickup)<input class="input" name="stuck_hours" inputmode="numeric" value="${s.stuck_hours}"></label></div>`,
   };

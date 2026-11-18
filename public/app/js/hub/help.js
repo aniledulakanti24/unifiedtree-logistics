@@ -20,7 +20,6 @@ const FAQ = [
   ['weight', 'What is volumetric weight?', 'Large, light parcels are charged by size. For courier it is length × width × height in cm, divided by 5,000. You pay on the higher of actual and volumetric weight.'],
   ['weight', 'Why was I charged for more weight?', 'If a provider’s scale shows more than you declared, it appears under Weight checks. You can accept it, or dispute it within 7 days.'],
   ['wallet', 'How does the wallet work?', 'Add money once and use it for transport, travel, recharges and bills. Prepaid bookings are paid from it right away.'],
-  ['wallet', 'What is Pay on delivery?', 'You pay the provider directly when the service is done, with a small fee. Nothing is taken from your wallet.'],
   ['wallet', 'How do reward points work?', 'You earn points on prepaid payments. 1 point is worth ₹1. Use them at checkout or move them to your wallet from Rewards.'],
   ['travel', 'Can I get an alert when fares drop?', 'Yes. Search a route under Flights, Trains or Buses and choose Set a price alert.'],
   ['recharge', 'How does FASTag auto-recharge work?', 'Connect your FASTag under Auto-pay and set a limit. When the balance falls below it, your wallet tops it up.'],

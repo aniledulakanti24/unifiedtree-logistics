@@ -40,12 +40,12 @@ export async function addInstrument(type) {
 
 // The list and Add buttons on the profile's Payment methods tab.
 const shown = { type: '' };
-export async function mountInstruments(root) {
+export async function mountInstruments(root, onChange) {
   root.innerHTML = '<div class="skeleton" style="height:120px"></div>';
   const { instruments: all } = await api('/hub/checkout/methods');
   const fieldsF = [{ key: 'type', label: 'Type', options: [['', 'All methods'], ...Object.entries(TYPES).map(([k, v]) => [k, v[0]])] }];
   const list = all.filter((i) => !shown.type || i.type === shown.type);
-  const again = () => mountInstruments(root);
+  const again = () => { mountInstruments(root, onChange); if (onChange) onChange(); };
   root.innerHTML = `<div class="section-head"><span class="muted small">${all.length} saved</span>${filterBtn(countActive(fieldsF, shown), 'insFlt')}</div>
     ${list.length ? `<ul class="addr">${list.map((i) => `<li>${tile(TYPES[i.type][1], TYPES[i.type][2]).value}<div class="grow"><b>${esc(i.label)}</b><small class="muted block">${esc(TYPES[i.type][0])}${i.expiry ? ` · Expires ${esc(i.expiry)}` : ''}</small></div>${i.is_default ? '<span class="badge badge-green">Default</span>' : `<button class="btn btn-outline btn-sm" data-def="${esc(i.id)}" type="button">Make default</button>`}<button class="btn btn-danger btn-sm" data-del="${esc(i.id)}" type="button">Remove</button></li>`).join('')}</ul>` : `<p class="muted notop">${all.length ? 'No methods of this type.' : 'No saved methods yet. Add one to pay faster.'}</p>`}
     <div class="ins-add">${Object.entries(TYPES).map(([k, v]) => `<button class="btn btn-soft" data-add="${k}" type="button">+ ${esc(v[0])}</button>`).join('')}</div>`;
