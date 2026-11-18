@@ -51,6 +51,8 @@ const holidayPage = lazy(() => import('./hub/holidays.js'));
 const intel = lazy(() => import('./hub/intel.js'));
 const control = lazy(() => import('./hub/control.js'));
 const freight = lazy(() => import('./hub/freight.js'));
+const unique = lazy(() => import('./hub/unique.js'));
+const more = lazy(() => import('./hub/more.js'));
 import { startOrderAlerts } from './hub/notify.js';
 import { setupApp, maybeTour } from './hub/experience.js';
 import { installSmoothScroll, watchView, resetScroll, progressStart, progressDone } from './hub/motion.js';
@@ -91,7 +93,7 @@ const ROUTES = [
   ['pay/mobile', pay.renderMobile], ['pay/fastag', pay.renderFastag], ['pay/bills', bills.renderBills], ['pay/send', bills.renderSend], ['pay/vouchers', bills.renderVouchers], ['pay/gold', bills.renderGold], ['pay/business', pay.renderBusiness], ['autopay', pay.renderAutopay],
   ['wallet', wallet.render], ['profile', profile.render], ['rewards', insights.renderRewards], ['insights', insights.renderInsights],
   ['my/orders', hubOrders.renderOrders], ['my/orders/:id', hubOrders.renderOrderDetail], ['my/returns', hubOrders.renderReturns], ['my/weight', hubWeight.render], ['help', hubHelp.renderHelp], ['feedback', hubHelp.renderFeedback],
-  ['intel', intel.render], ['services/:kind', travel.render], ['business/spend', control.renderSpend], ['business/integrations', control.renderIntegrations], ['business/credit', freight.renderCredit], ['business/carriers', freight.renderCarriers],
+  ['intel', intel.render], ['services/:kind', travel.render], ['business/spend', control.renderSpend], ['business/integrations', control.renderIntegrations], ['business/credit', freight.renderCredit], ['business/carbon', unique.renderCarbon], ['relay', unique.renderRelay], ['share-truck', unique.renderShare], ['chat-book', unique.renderChatBook], ['moving', more.renderMoving], ['trips', more.renderTrips], ['gifting', more.renderGifting], ['family', more.renderFamily], ['business/carriers', freight.renderCarriers],
   ['holidays', holidayPage.render], ['business/access', accessPage.render],
   ['business/tracking', business.renderTracking], ['business/whatsapp', business.renderWhatsApp], ['business/gst', business.renderGst], ['business/notifications', business.renderNotifications],
   // Seller tools.
@@ -168,6 +170,9 @@ const NAV = [
   { group: 'Business', business: true },
   { key: 'b-track', label: 'Live Tracking', icon: 'radar', path: '#/business/tracking', mod: 'tracking', business: true, match: '^business/tracking' },
   { key: 'b-wa', label: 'WhatsApp', icon: 'whatsapp', path: '#/business/whatsapp', mod: 'whatsapp', business: true, match: '^business/whatsapp' },
+  { key: 'b-trips', label: 'Trip expenses', icon: 'plane', path: '#/trips', business: true, match: '^trips' },
+  { key: 'b-gift', label: 'Bulk gifting', icon: 'gift', path: '#/gifting', business: true, match: '^gifting' },
+  { key: 'b-carbon', label: 'Carbon report', icon: 'leaf', path: '#/business/carbon', business: true, match: '^business/carbon' },
   { key: 'b-credit', label: 'Business credit', icon: 'card', path: '#/business/credit', mod: 'wallet', business: true, match: '^business/credit' },
   { key: 'b-carriers', label: 'Carrier connections', icon: 'plug', path: '#/business/carriers', business: true, owner: true, match: '^business/carriers' },
   { key: 'b-gst', label: 'Single GST', icon: 'receipt', path: '#/business/gst', mod: 'gst', business: true, match: '^business/gst' },
@@ -279,13 +284,13 @@ sideNav.addEventListener('click', (e) => {
 });
 document.getElementById('askBtn').addEventListener('click', openAsk);
 const NEW_ITEMS = [
-  ['Ship', [['parcel', 'amber', 'Send a parcel', 'Courier by pincode', '#/new-order?type=courier', 'booking'], ['bike', 'green', 'Book a vehicle', 'Bike, auto or van in town', '#/new-order?type=vehicle', 'booking'], ['truck', 'blue', 'Truck load', 'Full trucks between cities', '#/new-order?type=logistics', 'booking'], ['globe', 'violet', 'International', 'Ship abroad', '#/international/book', 'booking'], ['building', 'rose', 'Movers & storage', 'Packers, warehousing', '#/services/movers', 'booking']]],
+  ['Ship', [['parcel', 'amber', 'Send a parcel', 'Courier by pincode', '#/new-order?type=courier', 'booking'], ['bike', 'green', 'Book a vehicle', 'Bike, auto or van in town', '#/new-order?type=vehicle', 'booking'], ['truck', 'blue', 'Truck load', 'Full trucks between cities', '#/new-order?type=logistics', 'booking'], ['globe', 'violet', 'International', 'Ship abroad', '#/international/book', 'booking'], ['building', 'rose', 'Movers & storage', 'Packers, warehousing', '#/services/movers', 'booking'], ['route', 'blue', 'Relay delivery', 'Truck to hub, bikes to drops', '#/relay', 'booking'], ['truck', 'green', 'Share a truck', 'Split with a business', '#/share-truck', 'booking'], ['chat', 'green', 'Book by chat', 'Type or speak it', '#/chat-book', 'booking'], ['home', 'violet', 'Moving house', 'Movers, bills, address', '#/moving', 'booking'], ['gift', 'rose', 'Bulk gifting', 'Send to a list', '#/gifting', 'booking']]],
   ['Travel', [['plane', 'blue', 'Flight', 'Every airline', '#/travel/flights', 'travel'], ['train', 'green', 'Train', 'Tickets and PNR', '#/travel/trains', 'travel'], ['hotel', 'violet', 'Hotel', 'Rooms and stays', '#/travel/hotels', 'travel'], ['ride', 'amber', 'Local ride', 'Cab, auto, bike', '#/rides', 'travel']]],
   ['Pay', [['phone', 'green', 'Recharge', 'Mobile and DTH', '#/pay/mobile', 'recharge'], ['bill', 'amber', 'Pay a bill', '41 bill types', '#/book-pay', 'recharge'], ['fastag', 'coral', 'FASTag', 'Top up a tag', '#/pay/fastag', 'recharge'], ['rupee', 'blue', 'Send money', 'UPI or bank', '#/pay/send', 'recharge']]],
 ];
 // Big tiles across the top of the menu: the things people start most.
 const NEW_TOP = [['parcel', 'amber', 'Send parcel', '#/new-order?type=courier', 'booking'], ['bike', 'green', 'Vehicle', '#/new-order?type=vehicle', 'booking'], ['truck', 'blue', 'Truck load', '#/new-order?type=logistics', 'booking'], ['cart', 'green', 'Store orders', '#/my/orders?section=website', 'booking'], ['radar', 'blue', 'Track', '#/my/orders?scope=all&group=transit', 'booking']];
-const NEW_FOOT = [['returnbox', 'Start a return', '#/my/returns', 'returns'], ['receipt', 'All orders', '#/my/orders', 'booking']];
+const NEW_FOOT = [['user', 'Family wallet', '#/family', 'wallet'], ['returnbox', 'Start a return', '#/my/returns', 'returns'], ['receipt', 'All orders', '#/my/orders', 'booking']];
 document.getElementById('newBtn').addEventListener('click', (e) => {
   const btn = e.currentTarget;
   const top = NEW_TOP.filter((x) => can(x[4]) && ws.pathOn(x[3]));

@@ -12,6 +12,7 @@ import { quickBook } from './transport.js';
 import { openTracking } from './tracking.js';
 import { modOn } from './workspace.js';
 import { alertsState, askAlerts } from './notify.js';
+import { outlookCard } from './more.js';
 
 const TYPES = [
   { key: 'vehicle', icon: 'bike', tone: 'green', title: 'Vehicle', desc: 'In the city, or vans and trucks between cities', label: 'Vehicle details', go: 'Show available vehicles' },
@@ -21,7 +22,7 @@ const TYPES = [
 ];
 const DOMESTIC = TYPES.filter((x) => !x.intl);
 const isIntl = () => S.scope === 'intl';
-const SORTS = [['best', 'Best'], ['fast', 'Fastest'], ['low', 'Cheapest'], ['rating', 'Top rated']];
+const SORTS = [['best', 'Best'], ['fast', 'Fastest'], ['low', 'Cheapest'], ['rating', 'Top rated'], ['green', 'Greenest']];
 const SPEEDS = [['same', 'Same day', 'flame'], ['express', 'Express', 'plane'], ['standard', 'Standard', 'truck']];
 // Speeds are relative to the route: Express is the quickest couriers on this lane (up to a day
 // slower than the fastest), Standard the rest. Same day only when a courier delivers today.
@@ -156,7 +157,7 @@ function formCard(meta, dist) {
       ${isIntl() ? `<div class="no-type on no-type--intl">${tile('globe', 'blue').value}<span class="grow"><b>International</b><small>DHL, FedEx, Aramex, UPS and more, compared for express, air and sea</small></span><span class="no-type__tick">${icon('check', 18)}</span></div>` : `<fieldset class="no-svc"><legend class="req">Service</legend><div class="no-types" role="radiogroup" aria-label="Service">${types.map((x) => {
         const off = false;
         return `<label class="no-type ${k === x.key ? 'on' : ''} ${off ? 'is-off' : ''}"><input type="radio" name="svc" value="${x.key}" ${k === x.key ? 'checked' : ''} ${off ? 'disabled' : ''}>${tile(x.icon, x.tone).value}<span class="grow"><b>${esc(x.title)}</b><small>${esc(off ? `Only inside one city${dist ? ` (this trip is ${Math.round(dist)} km)` : ''}` : x.desc)}</small></span>${x.key === pick && !off ? '<i class="ws-tag">Suits this trip</i>' : ''}<span class="no-type__tick">${icon('check', 18)}</span></label>`;
-      }).join('')}</div>${types.length < DOMESTIC.length ? '<p class="muted small">More services can be added in <a class="link" href="#/workspace">Workspace</a>.</p>' : ''}</fieldset>`}
+      }).join('')}</div>${types.length < DOMESTIC.length ? '<p class="muted small">More services can be added in <a class="link" href="#/workspace">Workspace</a>.</p>' : ''}<div class="no-ways"><p class="no-ways__h">${icon('sparkle', 14)}More ways to send <small>Only on UT Log</small></p><div class="no-ways__g">${[['#/relay', 'route', 'blue', 'Relay delivery', 'One truck to a hub, bikes to every drop'], ['#/share-truck', 'truck', 'green', 'Share a truck', 'Split a truck between cities and save up to 45%'], ['#/chat-book', 'chat', 'violet', 'Book by chat', 'Type or speak it in your language']].map(([h, ic, tone, t, d]) => `<a class="no-way no-way--${tone}" href="${h}">${tile(ic, tone).value}<span><b>${t}</b><small>${d}</small></span>${icon('chevron', 16)}</a>`).join('')}</div></div></fieldset>`}
       ${T ? `<div class="no-sub"><p class="no-sub__h">${tile(T.icon, T.tone).value}<b>${esc(T.label)}</b></p><div class="form-grid">${sub}</div></div>` : ''}
       <details class="more" ${d.value || d.reference || d.insure ? 'open' : ''}><summary>More options${icon('chevron', 16)}</summary><div class="form-grid more__b">
         ${isIntl() ? '' : `<label class="field">Package value (₹)<input class="input" name="value" inputmode="numeric" value="${esc(d.value || '')}" placeholder="For insurance"><small class="muted" id="noFx"></small></label>`}
@@ -199,7 +200,8 @@ function groupName(g) {
   return o ? o.title.replace(/^Full truck · /, '').replace(/^Part load · /, '') : g;
 }
 function resultsView(T, dist) {
-  const mini = `<section class="card no-mini"><span class="no-mini__ico">${isIntl() && S.to && S.to.code ? `<span class="no-mini__flag">${flag(S.to.code, 34)}</span>` : tile(T.icon, T.tone).value}</span><div class="grow"><b>${esc(placeLabel(S.from))} → ${esc(placeLabel(S.to))}</b><small>${esc([dist && `${dist.toFixed(1)} km`, T.title, detailLine()].filter(Boolean).join(' · '))}</small></div><button class="btn btn-outline btn-sm" type="button" data-editform>${icon('sliders', 15)}Edit</button></section>`;
+  let mini = `<section class="card no-mini"><span class="no-mini__ico">${isIntl() && S.to && S.to.code ? `<span class="no-mini__flag">${flag(S.to.code, 34)}</span>` : tile(T.icon, T.tone).value}</span><div class="grow"><b>${esc(placeLabel(S.from))} → ${esc(placeLabel(S.to))}</b><small>${esc([dist && `${dist.toFixed(1)} km`, T.title, detailLine()].filter(Boolean).join(' · '))}</small></div><button class="btn btn-outline btn-sm" type="button" data-editform>${icon('sliders', 15)}Edit</button></section>`;
+  if (!S.issue) mini += '<div id="noOutlook" class="no-outlook"></div>';
   if (S.issue) return `${mini}<div class="card issue" role="alert"><b>${esc(S.issue.title || 'No service for this trip')}</b><p>${esc(S.issue.message)}</p><button class="btn btn-outline btn-sm" type="button" data-editform>Change the details</button></div>`;
   const map = groups();
   const entries = S.type === 'courier' ? SPEEDS.filter(([k]) => map.has(k)).map(([k]) => [k, map.get(k)]) : [...map.entries()].sort((a, b) => (a[1][0].max_kg || 0) - (b[1][0].max_kg || 0));
@@ -222,6 +224,7 @@ function partnerList() {
   const eta = (o) => Date.parse(o.eta);
   if (S.sort === 'fast') list = [...list].sort((a, b) => eta(a) - eta(b) || a.total - b.total);
   if (S.sort === 'low') list = [...list].sort((a, b) => a.total - b.total);
+  if (S.sort === 'green') list = [...list].sort((a, b) => (a.co2 ?? 1e9) - (b.co2 ?? 1e9) || a.total - b.total);
   if (S.sort === 'rating') list = [...list].sort((a, b) => b.rating - a.rating || a.total - b.total);
   return { all, list };
 }
@@ -241,7 +244,7 @@ function partnerStep() {
   const lane = S.quote.lane;
   const best = (key, lowWins) => [...all].sort((a, b) => (lowWins ? a[key] - b[key] : b[key] - a[key]))[0];
   const laneCard = lane && all.length > 1 ? `<div class="no-lane"><p class="no-lane__h">${icon('radar', 15)}<b>This route's record</b><small>${lane.shipments.toLocaleString('en-IN')} shipments in the last ${lane.days} days</small></p><div class="no-lane__g"><span><small>Most on time</small><b>${esc(best('on_time').provider)}</b><em>${best('on_time').on_time}%</em></span>${S.type === 'courier' ? `<span><small>Fewest returned</small><b>${esc(best('rto_pct', true).provider)}</b><em>${best('rto_pct', true).rto_pct}%</em></span>` : ''}<span><small>Fewest claims</small><b>${esc(best('claims_pct', true).provider)}</b><em>${best('claims_pct', true).claims_pct}%</em></span>${all.some((o) => o.mine) ? (() => { const m = [...all].filter((o) => o.mine).sort((a, b) => b.mine.trips - a.mine.trips)[0]; return `<span class="no-lane__mine"><small>You book most</small><b>${esc(m.provider)}</b><em>${m.mine.trips} trip${m.mine.trips === 1 ? '' : 's'} · ${m.mine.delivered} delivered${m.mine.claims ? ` · ${m.mine.claims} claim${m.mine.claims === 1 ? '' : 's'}` : ''}</em></span>`; })() : ''}</div></div>` : '';
-  const stats = (o) => `${o.mine ? `<span class="no-stat no-stat--mine" title="From your own bookings">${icon('user', 11)}You: ${o.mine.trips} trip${o.mine.trips === 1 ? '' : 's'}${o.mine.claims ? ` · ${o.mine.claims} claim${o.mine.claims === 1 ? '' : 's'}` : ''}</span>` : ''}<span class="no-stat">${o.on_time}% on time</span>${S.type === 'courier' ? `<span class="no-stat ${o.rto_pct > 3 ? 'warn' : ''}">${o.rto_pct}% returned</span>` : ''}`;
+  const stats = (o) => `${o.mine ? `<span class="no-stat no-stat--mine" title="From your own bookings">${icon('user', 11)}You: ${o.mine.trips} trip${o.mine.trips === 1 ? '' : 's'}${o.mine.claims ? ` · ${o.mine.claims} claim${o.mine.claims === 1 ? '' : 's'}` : ''}</span>` : ''}<span class="no-stat">${o.on_time}% on time</span>${o.co2 != null ? `<span class="no-stat no-stat--co2" title="Estimated emissions for this trip">${icon('leaf', 11)}${o.co2 >= 1000 ? `${(o.co2 / 1000).toFixed(1)} t` : `${o.co2} kg`} CO₂</span>` : ''}${S.type === 'courier' ? `<span class="no-stat ${o.rto_pct > 3 ? 'warn' : ''}">${o.rto_pct}% returned</span>` : ''}`;
   const cmpOn = (o) => S.cmp.includes(o.id);
   return `${laneCard}<div class="no-bar">${sortChips(S.sort, SORTS)}${filterBtn(countActive(filterFields(), S.f), 'noFlt')}</div>
     ${cod ? `<p class="no-codnote">${icon('cash', 16)}${codWith ? `You chose pay on delivery. ${codWith} of ${all.length} partners take it; the others are online-only.` : 'None of these partners take pay on delivery. Pick another vehicle, or <button class="link" type="button" data-editform>switch to Pay online</button>.'}</p>` : ''}
@@ -328,6 +331,9 @@ function wire(view, meta, again) {
     if (o) { S.selected = o.dataset.id; again(); const b = view.querySelector('#noGo'); if (b && matchMedia('(max-width: 1100px)').matches) b.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); return; }
     if (t.closest('#noGo')) book(again);
   };
+  // Route outlook: where prices are heading, and anything that may slow the trip down.
+  const olEl = view.querySelector('#noOutlook');
+  if (olEl && S.from && S.to) outlookCard(olEl, { section: S.type, from: S.from.city || placeLabel(S.from), to: S.to.city || placeLabel(S.to), date: S.d.pickup_at || undefined });
   // The price is held for 20 minutes from the quote.
   clearInterval(holdTimer);
   const hold = view.querySelector('#noHold');

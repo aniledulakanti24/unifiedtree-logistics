@@ -6,7 +6,7 @@ import { tile } from './art.js';
 import { icon } from './icons.js';
 import { refresh } from './ui.js';
 
-const head = (ic, tone, title, intro, right = '') => `<div class="page-head"><div class="row head-t">${tile(ic, tone).value}<div><h1>${esc(title)}</h1><p>${esc(intro)}</p></div></div><div class="row">${right}</div></div>`;
+const head = (ic, tone, title, intro, right = '') => `<div class="page-head ph-hero"><div class="row head-t">${tile(ic, tone).value}<div><h1>${esc(title)}</h1><p>${esc(intro)}</p></div></div><div class="row">${right}</div></div>`;
 
 // ---- business credit ---------------------------------------------------------------------------
 export async function renderCredit(view) {
@@ -21,7 +21,7 @@ export async function renderCredit(view) {
     view.innerHTML = `${head('card', 'violet', 'Business credit', 'Book now, pay once a month.')}
       <section class="card cr-offer"><div class="cr-offer__t"><h2 class="notop">Get up to ${esc(money(100000))} of credit</h2><p>Charge trucks, vehicles and couriers to one monthly statement instead of topping up the wallet before every booking.</p>
         <ul class="cr-points"><li>${icon('calendar', 16)}Statement on the 1st, pay by the 15th: up to 45 days, no interest</li><li>${icon('receipt', 16)}One GST invoice for the month</li><li>${icon('shield', 16)}Wallet PIN still approves every charge</li></ul>
-        <button class="btn btn-primary" id="crOn" type="button">${icon('check', 16)}Turn on business credit</button><p class="muted small">Demo: the limit is approved at once. A real lender checks GST returns, bank statements and a credit score first.</p></div></section>`;
+        <button class="btn btn-primary" id="crOn" type="button">${icon('check', 16)}Turn on business credit</button><p class="muted small">Demo: the limit is approved at once. A real lender checks GST returns, bank statements and a credit score first.</p></div><div class="cr-art" aria-hidden="true"><div class="cr-card"><span class="cr-card__chip"></span><span class="cr-card__brand">UT Log · Business</span><b class="cr-card__amt">${esc(money(100000))}</b><small>Credit limit</small><span class="cr-card__foot"><span>45 days</span><span>0% interest</span></span></div><div class="cr-card cr-card--back"></div></div></section>`;
     view.querySelector('#crOn').addEventListener('click', (e) => withBusy(e.currentTarget, async () => { try { await api('/hub/credit/apply', { method: 'POST' }); toast('Business credit is on'); again(); } catch (x) { toast(x.message, true); } }));
     return;
   }

@@ -1,6 +1,8 @@
 // Orders and Returns: the cross-service lists, and the parts each service workspace reuses.
 import { api, esc, money, store, toast, modal, withBusy, dateTime, date, pager, formData } from '../core.js';
 import { walletCheckout } from './wallet-checkout.js';
+import { luggageAhead, receiverCard, strandedHtml, wireStranded } from './unique.js';
+import { mergeBanner } from './more.js';
 import { tile, scene } from './art.js';
 import { statusPill, withFunds, refresh, downloadCsv, filterBtn, openFilters, countActive, SECTION_LABEL } from './ui.js';
 import { popover } from './prefs.js';
@@ -149,6 +151,7 @@ export async function renderOrders(view, { query }) {
   view.querySelector('#csv').addEventListener('click', () => downloadCsv('ut-log-orders.csv', csvRows(r.data)));
   wireOrders(view, r, again);
   wireTableTools(view, 'orders');
+  const mb = document.createElement('div'); mb.className = 'mg-wrap'; const top = view.querySelector('.page-head'); if (top) { top.after(mb); mergeBanner(mb, again); }
 }
 const vehicleEmpty = (text) => `<div class="empty-scene">${scene('orders').value}<p>${esc(text)}</p><a class="btn btn-primary" href="#/vehicle/book">Create order now</a></div>`;
 
@@ -172,6 +175,7 @@ function orderMenu(anchor, x, again) {
     x.group === 'delivered' && !x.rating && ['rate', 'Rate this service', () => openRate(x, again)],
     x.booking_id && ['transit', 'delivered'].includes(x.group) && !x.claim && ['claim', 'Report a problem', () => openClaim(x, again)],
     ['new', 'assigned'].includes(x.group) && !x.sample && x.status !== 'PAY_LATER' && ['cancel', 'Cancel booking', () => cancelOne(x, again)],
+    x.bk_input && ['new', 'assigned'].includes(x.group) && !x.stranded && ['shield', 'Demo: partner cancels', async () => { try { await api('/hub/orders/simulate-failure', { method: 'POST', body: { id: x.id } }); toast('The partner cancelled. See what happens next.'); setTimeout(again, 400); } catch (e) { toast(e.message, true); } }],
     ['help', 'Get help', () => { location.hash = `#/support?new=1&ref=${encodeURIComponent(x.id)}`; }],
   ].filter(Boolean);
   popover(anchor, `<ul class="pop__list">${items.map(([k, l]) => `<li><button type="button" data-a="${k}"><span>${esc(l)}</span></button></li>`).join('')}</ul>`, (el, close) => {
@@ -224,7 +228,7 @@ export async function renderOrderDetail(view, { id }) {
           <div class="od-hero__meta"><span class="mono">${esc(x.id)}</span>${copyBtn(x.id, 'order ID')}<span class="dot">·</span>${esc(dateTime(x.at))}${x.reference ? `<span class="dot">·</span>${esc(x.reference)}` : ''}</div></div>
         <div class="od-hero__r"><span class="od-status od-status--${st}"><i></i>${esc(label)}</span><b class="od-amt" translate="no">${esc(money(x.amount))}</b><small>${x.pay_mode === 'cod' ? 'Pay on delivery' : `Paid by ${esc(PAY_LABEL[x.pay_via] || 'wallet')}`}</small></div>
       </div>
-      <div class="od-acts">${primary}${again ? `<a class="btn btn-outline" href="${again[0]}">${icon('repeat', 16)}${again[1]}</a>` : x.form ? `<button class="btn btn-outline" id="again" type="button">${icon('repeat', 16)}Book again</button>` : ''}<a class="btn btn-outline" href="#/support?new=1&ref=${encodeURIComponent(x.id)}">${icon('help', 16)}Get help</a><button class="btn btn-outline" id="more" type="button">More</button></div>
+      <div class="od-acts">${primary}${x.section === 'travel' && ['flight', 'train', 'bus'].includes(x.kind) && x.status !== 'CANCELLED' ? `<button class="btn btn-outline" id="lug" type="button">${icon('parcel', 16)}Send luggage ahead</button>` : ''}${again ? `<a class="btn btn-outline" href="${again[0]}">${icon('repeat', 16)}${again[1]}</a>` : x.form ? `<button class="btn btn-outline" id="again" type="button">${icon('repeat', 16)}Book again</button>` : ''}<a class="btn btn-outline" href="#/support?new=1&ref=${encodeURIComponent(x.id)}">${icon('help', 16)}Get help</a><button class="btn btn-outline" id="more" type="button">More</button></div>
     </section>`;
 
   // Delivery progress, with the time of each step when we have it.
@@ -271,12 +275,13 @@ export async function renderOrderDetail(view, { id }) {
     </dl>${x.cashback || x.earned ? `<div class="od-earn">${x.cashback ? `<span>${icon('tag', 14)}${esc(money(x.cashback))} cashback</span>` : ''}${x.earned ? `<span>${icon('star', 14)}${x.earned} points earned</span>` : ''}</div>` : ''}</section>`;
   const extras = `${x.return ? `<section class="card"><h2 class="notop">Return</h2><p class="notop"><span class="badge badge-amber">${esc(x.return.label)}</span></p><a class="link" href="#/my/returns">View return</a></section>` : ''}
     ${x.weight_case ? `<section class="card"><h2 class="notop">Weight check</h2><dl class="od-kv">${row('Declared', `${x.weight_case.declared} kg`)}${row('Charged', `${x.weight_case.charged} kg`)}</dl><a class="link" href="#/my/weight?tab=disputes">Review</a></section>` : ''}
-    ${x.claim ? `<section class="card"><h2 class="notop">Claim</h2><p class="notop">${esc(x.claim.type)}: ${x.claim.status === 'APPROVED' ? `paid ${esc(money(x.claim.payout))}` : 'in review'}</p></section>` : ''}
+    ${x.claim ? `<section class="card od-claim od-claim--${x.claim.status === 'APPROVED' ? 'ok' : x.claim.status === 'WITH_CARRIER' ? 'carrier' : 'wait'}"><h2 class="notop">${icon('shield', 16)}${esc(x.claim.type)} claim${x.claim.auto ? ' · filed for you' : ''}</h2><p class="notop">${x.claim.status === 'APPROVED' ? `${esc(x.claim.insurer || 'Insurer')} paid <b translate="no">${esc(money(x.claim.payout))}</b> to your wallet.` : x.claim.status === 'WITH_CARRIER' ? `Not insured, so it went to ${esc(x.claim.carrier)} under their own liability (up to <span translate="no">${esc(money(x.claim.carrier_limit || 0))}</span>). We follow it up for you.` : `${esc(x.claim.insurer || 'The insurer')} is checking the photos. Payout about <b translate="no">${esc(money(x.claim.payout))}</b>.`}</p>${x.claim.auto ? `<small class="muted">Filed automatically from the ${esc(x.claim.source)}${x.claim.note ? `: "${esc(x.claim.note)}"` : ''}.</small>` : ''}</section>` : ''}
     ${x.can_return ? '<button class="btn btn-outline btn-block" id="ret" type="button">Create return</button>' : ''}
     <section class="card od-help"><b>Need help with this order?</b><small>Quote ${esc(x.id)}. Most questions are answered within an hour.</small><a class="btn btn-outline btn-sm" href="#/support?new=1&ref=${encodeURIComponent(x.id)}">${icon('chat', 15)}Chat with support</a></section>`;
 
   const freight = x.freight ? '<section class="card od-freight" id="odFreight"><div class="skeleton" style="height:140px"></div></section>' : '';
-  const main = type === 'ship' ? `${x.status === 'CANCELLED' ? '' : progress}${freight}${route}<div class="od-two">${partner}${pkg}</div>${activity}`
+  const rx = x.booking_id && !['delivered', 'cancelled'].includes(x.group) && x.status !== 'CANCELLED' ? '<section class="card od-rx" id="odRx"><div class="skeleton" style="height:90px"></div></section>' : '';
+  const main = type === 'ship' ? `${strandedHtml(x)}${x.status === 'CANCELLED' ? '' : progress}${rx}${freight}${route}<div class="od-two">${partner}${pkg}</div>${activity}`
     : type === 'trip' ? `${ticket}${route}${activity}`
       : receipt;
   view.innerHTML = `<div class="od">${hero}${x.sample ? '<p class="od-sample">This is a sample order from your account history.</p>' : ''}
@@ -291,6 +296,9 @@ export async function renderOrderDetail(view, { id }) {
   on('#more', (e) => orderMenu(e.currentTarget, x, redo));
   on('#ret', () => createReturn(id, redo));
   if (x.freight) freightCard(view.querySelector('#odFreight'), x, redo);
+  if (view.querySelector('#odRx')) receiverCard(view.querySelector('#odRx'), x, redo);
+  wireStranded(view, x, redo);
+  on('#lug', () => luggageAhead(x, redo));
   view.querySelectorAll('[data-copy]').forEach((b) => b.addEventListener('click', async () => { try { await navigator.clipboard.writeText(b.dataset.copy); toast('Copied'); } catch (e) { toast(b.dataset.copy); } }));
 }
 

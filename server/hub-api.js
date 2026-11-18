@@ -195,6 +195,7 @@ module.exports = function register(routes, { send }, ctx, engine) {
     Object.defineProperty(actorHub, '_actor', { value: { key: c.user.key, role: c.role }, writable: true, configurable: true, enumerable: false });
     Object.defineProperty(actorHub, '_req', { value: { body: c.body || {} }, writable: true, configurable: true, enumerable: false });
     sweepWaitlists(c.db, actorHub);
+    for (const sweep of late.sweeps || []) { try { sweep(c.db, actorHub); } catch (e) { /* a sweep never blocks the request */ } }
     try { await fn({ ...c, h: actorHub, owner: c.ownerKey }); }
     catch (err) {
       if (err.status) return send(c.res, err.status, { message: err.message, ...(err.extra || {}) });
@@ -312,7 +313,7 @@ module.exports = function register(routes, { send }, ctx, engine) {
   }
 
   // ---- transport orders ------------------------------------------------------------
-  const GROUP = { WAITLIST: 'new', BOOKED: 'new', ASSIGNED: 'assigned', ARRIVING: 'assigned', PICKUP_SCHEDULED: 'assigned', PICKED_UP: 'transit', IN_TRANSIT: 'transit', OUT_FOR_DELIVERY: 'transit', DELIVERED: 'delivered', CANCELLED: 'cancelled', SUCCESS: 'delivered', CONFIRMED: 'new', PAY_LATER: 'new' };
+  const GROUP = { WAITLIST: 'new', POOLING: 'new', BOOKED: 'new', ASSIGNED: 'assigned', ARRIVING: 'assigned', PICKUP_SCHEDULED: 'assigned', PICKED_UP: 'transit', IN_TRANSIT: 'transit', OUT_FOR_DELIVERY: 'transit', DELIVERED: 'delivered', CANCELLED: 'cancelled', SUCCESS: 'delivered', CONFIRMED: 'new', PAY_LATER: 'new' };
   // Demo clock: a waitlisted ticket is decided 3 minutes after booking. Low waitlist numbers
   // confirm; the rest are cancelled and the fare goes back to the wallet.
   function sweepWaitlists(db, h) {
@@ -572,6 +573,14 @@ module.exports = function register(routes, { send }, ctx, engine) {
     settleDeal(h, deal, option.title);
     const i = q.input;
     const rec = addRecord(h, { id, booking_id: id, places, section: q.section, title: option.title, provider: option.provider, provider_type: option.provider_type, sub: `${i.from} → ${i.to}`, amount, gross: option.total + fee + extraFee, fee, extras, discount: deal.discount, coupon: deal.coupon, points_used: deal.points, insurance: option.insurance || 0, declared: option.insurance ? i.declared : 0, pay_mode: pay, ...via, status: 'BOOKED', label: 'Booking confirmed', weight: i.weight, reference: text(body.reference, 40), segment: i.segment, form: q.form, pickup_address: text(body.pickup_address, 200), drop_address: text(body.drop_address, 200), contact_name: text(c.name, 60), contact_phone: c.phone, receiver: rc.phone ? { name: text(rc.name, 60) || 'there', phone: rc.phone, consent: !!rc.consent } : null, scheduled_for: i.pickupAt > Date.now() + 3600000 ? iso(i.pickupAt) : null });
+    // For the carbon report: how it moved, how far, and the lowest-emission option that was on offer.
+    rec.mode = option.mode; rec.km = Math.round(i.distanceKm || 0); rec.co2 = option.co2; rec.co2_min = Math.min(...[option, ...q.options].map((o) => o.co2).filter((x) => x != null));
+    // Never stranded: up to three other partners for the same kind of vehicle, kept in case this one cancels.
+    rec.bk_input = i; rec.option_total = option.total;
+    rec.backups = q.options.filter((o) => o.id !== option.id && o.mode === option.mode && (o.vehicle === option.vehicle || q.section === 'courier')).sort((a, b) => a.total - b.total).slice(0, 3);
+    // Demo: about one partner in five cancels a minute after booking, before pickup.
+    if (rec.backups.length && parseInt(crypto.createHash('md5').update(id + 'risk').digest('hex').slice(0, 6), 16) % 5 === 0) rec.risk = { fail_at: Date.now() + 60000, done: false };
+    if (q.form && q.form.luggage_for) { rec.luggage_for = q.form.luggage_for; rec.title = `Luggage ahead · ${option.provider}`; }
     // Trucks and vans between cities: consignment note now; e-way bill, proof of delivery and detention later.
     if (['ftl', 'intercity', 'ptl'].includes(option.mode) || (q.section === 'logistics' && option.mode === 'local')) {
       const seed = parseInt(crypto.createHash('md5').update(id).digest('hex').slice(0, 8), 16);
@@ -1681,5 +1690,5 @@ module.exports = function register(routes, { send }, ctx, engine) {
     send(res, 200, { ...p, workspace: workspaceOf(h), score: profileScore(p, db), score_total: 7, apps: APPS.map(([key, name, group]) => ({ key, name, group, connected: !!p.connected[key] })) });
   });
 
-  return { hub, hubOf, live, oops, text, takePayment, addRecord, offers, upcomingOf, late, requireApproval, approvalBudget };
+  return { hub, hubOf, live, oops, text, takePayment, addRecord, offers, upcomingOf, late, requireApproval, approvalBudget, quotes };
 };

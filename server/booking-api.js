@@ -563,5 +563,50 @@ module.exports = function register(routes, { send, authUser }, ctx) {
     }
     return { km: +pin.km.toFixed(1), area: null, city: null, cityKey: null, pincode: pin.pincode };
   }
-  return { dispatchPool, assignDriver, stepTrip, VEHICLES, parseInput, buildOptions, resolveRoute, resolvePlace, createBooking, trackById, areaPoint, haversine, pinPoint, nearest, cities: CITIES };
+  // ---- receiver link: the person receiving picks a slot, a neighbour or a locker, or asks for a new address.
+  // Slots, neighbours, lockers and notes are free; a new address is a re-route the sender approves and pays.
+  const SLOTS = ['9 am – 12 pm', '12 – 3 pm', '3 – 6 pm', '6 – 9 pm'];
+  const rxView = (b) => {
+    const t = trackingView(b); const area = String(b.route.to || '').split(',')[0];
+    const start = new Date(Math.max(Date.now(), Date.parse(b.option.eta) || Date.now())); start.setHours(0, 0, 0, 0);
+    const days = [0, 1, 2].map((n) => new Date(start.getTime() + n * 864e5).toISOString().slice(0, 10));
+    return { id: b.id, provider: b.option.provider, service: b.option.title, status: t.status, label: t.label, promised_by: t.promised_by, delivered: t.status === 'DELIVERED',
+      from_city: String(b.route.from || '').split(',').slice(-1)[0].trim(), to_area: area, address: String(b.route.drop_address || '').replace(/^(.{0,18}).*$/, '$1…'),
+      can_change: !['OUT_FOR_DELIVERY', 'DELIVERED', 'CANCELLED'].includes(t.status), local: b.service === 'local',
+      slots: days.map((d) => ({ date: d, slots: SLOTS })), lockers: [`UT Locker · ${area} Metro station`, `UT Locker · ${area} Market`, `UT Locker · ${area} Post office`],
+      reroute_fee: Math.max(49, Math.round(b.option.total * 0.15)), damage: b.rx.damage || null, prefs: b.rx.prefs, requests: b.rx.requests.map(({ id, address, fee, status, at }) => ({ id, address, fee, status, at })) };
+  };
+  const rxOf = (id, k) => { const b = bookings.get(String(id || '').toUpperCase()); return b && b.rx && b.rx.key === String(k || '') ? b : null; };
+  routes['GET /v1/public/receiver'] = async (req, res, body, url) => {
+    const b = rxOf(url.searchParams.get('id'), url.searchParams.get('k'));
+    if (!b) return send(res, 404, { message: 'This link has expired or is not right. Ask the sender for a new one.' });
+    send(res, 200, rxView(b));
+  };
+  routes['POST /v1/public/receiver'] = async (req, res, body) => {
+    const b = rxOf(body.id, body.k);
+    if (!b) return send(res, 404, { message: 'This link has expired or is not right.' });
+    const v = rxView(b);
+    if (body.action === 'damage') {
+      const note = String(body.note || '').replace(/[<>]/g, '').trim().slice(0, 200);
+      if (note.length < 4) return send(res, 400, { message: 'Tell us what is damaged.' });
+      b.rx.damage = { note, at: new Date().toISOString() };
+      return send(res, 200, rxView(b));
+    }
+    if (!v.can_change) return send(res, 400, { message: 'It is already out for delivery, so it can no longer be changed.' });
+    const clean = (x, n) => String(x || '').replace(/[<>]/g, '').trim().slice(0, n);
+    const p = b.rx.prefs; const at = new Date().toISOString();
+    if (body.action === 'slot') { if (!v.slots.some((d) => d.date === body.date) || !SLOTS.includes(body.slot)) return send(res, 400, { message: 'Pick one of the listed slots.' }); p.slot = { date: body.date, slot: body.slot, at }; }
+    else if (body.action === 'neighbour') { const name = clean(body.name, 60); const flat = clean(body.flat, 40); if (name.length < 2 || flat.length < 1) return send(res, 400, { message: 'Enter the neighbour\'s name and flat or house number.' }); p.leave = { type: 'neighbour', name, flat, at }; }
+    else if (body.action === 'locker') { if (!v.lockers.includes(body.locker)) return send(res, 400, { message: 'Pick one of the lockers.' }); p.leave = { type: 'locker', locker: body.locker, code: String(crypto.randomInt(100000, 999999)), at }; }
+    else if (body.action === 'note') { p.note = { text: clean(body.text, 160), at }; }
+    else if (body.action === 'address') {
+      const address = clean(body.address, 200); if (address.length < 10) return send(res, 400, { message: 'Enter the full new address.' });
+      if (b.rx.requests.some((x) => x.status === 'pending')) return send(res, 400, { message: 'A change is already waiting for the sender.' });
+      b.rx.requests.push({ id: 'RQ' + crypto.randomBytes(3).toString('hex').toUpperCase(), address, fee: v.reroute_fee, status: 'pending', at });
+    } else if (body.action === 'clear') { delete p.leave; delete p.slot; }
+    else return send(res, 400, { message: 'Choose what to change.' });
+    send(res, 200, rxView(b));
+  };
+
+  return { dispatchPool, assignDriver, stepTrip, VEHICLES, parseInput, buildOptions, resolveRoute, resolvePlace, createBooking, trackById, areaPoint, haversine, pinPoint, nearest, cities: CITIES, bookingById: (id) => bookings.get(id) };
 };

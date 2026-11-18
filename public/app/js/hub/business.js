@@ -7,7 +7,7 @@ import { openTracking } from './tracking.js';
 import { waTabs, renderTab } from './wa.js';
 
 const gate = (view) => { if (store.state.accountType === 'business') return false; view.innerHTML = `<div class="card">${emptyScene('This is part of a Business account. Switch using the Personal / Business control at the top.', null, 'carton')}</div>`; return true; };
-const head = (icon, tone, title, intro, right = '') => `<div class="page-head"><div class="row head-t">${tile(icon, tone).value}<div><h1>${esc(title)}</h1><p>${esc(intro)}</p></div></div><div class="row">${right}</div></div>`;
+const head = (icon, tone, title, intro, right = '') => `<div class="page-head ph-hero"><div class="row head-t">${tile(icon, tone).value}<div><h1>${esc(title)}</h1><p>${esc(intro)}</p></div></div><div class="row">${right}</div></div>`;
 
 // ---- live tracking -------------------------------------------------------------------
 export async function renderTracking(view) {

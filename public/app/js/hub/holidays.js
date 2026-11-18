@@ -23,7 +23,7 @@ export async function render(view, { query }) {
   const now = today();
   let selected = days.find((x) => x.date === now) || days.find((x) => x.national || x.custom.length) || days[0];
   view.innerHTML = `
-    <div class="page-head"><div class="row head-t">${tile('calendar', 'coral').value}<div><h1>Partner Holidays</h1><p>When delivery partners are closed or running reduced service.</p></div></div>
+    <div class="page-head ph-hero"><div class="row head-t">${tile('calendar', 'coral').value}<div><h1>Partner Holidays</h1><p>When delivery partners are closed or running reduced service.</p></div></div>
       <div class="row">${filterBtn(countActive(fields, f))}<button class="btn btn-outline" id="ics" type="button">Export calendar</button><button class="btn btn-primary" id="add" type="button">+ Add closure</button></div></div>
     <div class="hol">
       <section class="card"><div class="hol__nav"><a class="icon-btn" href="#/holidays?month=${shift(month, -1)}" aria-label="Previous month"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 6-6 6 6 6"/></svg></a><h2 class="notop">${esc(label(month))}</h2><a class="icon-btn" href="#/holidays?month=${shift(month, 1)}" aria-label="Next month"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg></a><a class="btn btn-outline btn-sm" href="#/holidays">Today</a><span class="spacer"></span><span class="hol__key"><i class="k-closed"></i>Closed<i class="k-limited"></i>Limited</span></div>
