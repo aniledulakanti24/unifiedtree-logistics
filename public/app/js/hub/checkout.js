@@ -5,7 +5,7 @@ import { duo } from './art.js';
 import { addInstrument, payCatalog, TYPES } from './instruments.js';
 import { isPhone, intentPanel } from './upi.js';
 
-export const PAY_LABEL = { wallet: 'Wallet', upi: 'UPI', card: 'Card', emi: 'EMI', netbanking: 'Netbanking', paylater: 'Pay Later', ewallet: 'Other wallet', giftcard: 'Gift card', neft: 'Bank transfer' };
+export const PAY_LABEL = { wallet: 'Wallet', upi: 'UPI', card: 'Card', emi: 'EMI', netbanking: 'Netbanking', paylater: 'Pay Later', ewallet: 'Other wallet', giftcard: 'Gift card', neft: 'Bank transfer', credit: 'Business credit' };
 const METHODS = [['wallet', 'Wallet', 'Your UT Log balance', 'wallet'], ['upi', 'UPI', 'Any UPI app or ID', 'phone'], ['card', 'Card', 'Credit or debit', 'card'], ['emi', 'EMI', 'Pay monthly', 'calendar'], ['netbanking', 'Netbanking', 'Your bank', 'bank'], ['paylater', 'Pay Later', 'Pay next month', 'receipt'], ['ewallet', 'Other wallets', 'Paytm, Amazon Pay', 'cash'], ['giftcard', 'Gift card', 'Redeem a card', 'gift'], ['neft', 'Bank transfer', 'NEFT or RTGS', 'building']];
 const NO_CARD = ['card', 'emi', 'paylater', 'giftcard'];
 

@@ -7,7 +7,7 @@ import { openTracking } from './tracking.js';
 import { smoothTo } from './motion.js';
 import { deskTabs, renderDeskBody } from './desk.js';
 import { payMethods, PAY_LABEL, BOOKING_PAY } from './checkout.js';
-import { walletCheckout, walletStrip } from './wallet-checkout.js';
+import { payWithApproval, walletCheckout, walletStrip } from './wallet-checkout.js';
 import { openPlacePicker, placeChips, samePlace } from './places.js';
 import { icon } from './icons.js';
 
@@ -310,7 +310,7 @@ export function quickBook(section, mem, form) {
     try {
       const check = await book({ dry_run: true });
       const r = await walletCheckout({ amount: check.amount, run: book, info: {
-        title: o.title, payee: o.provider, sub: o.title, img: vehicleImg(o.vehicle), section, coupon: true,
+        title: o.title, payee: o.provider, sub: o.title, img: vehicleImg(o.vehicle), section, coupon: true, credit: store.state.accountType === 'business',
         icon: { vehicle: 'bike', courier: 'parcel', logistics: 'truck', international: 'globe' }[section] || 'truck', tone: 'green', baseLabel: 'Fare', refLabel: 'Booking reference',
         route: { from: pickup, to: drop, fromWho: [fc.name, fc.phone].filter(Boolean).join(' · ') || `${name} · ${phone}`, toWho: [tc.name, tc.phone].filter(Boolean).join(' · '), eta: o.eta },
         facts: [o.capacity, o.rating ? `★ ${Number(o.rating).toFixed(1)}` : '', o.verified ? 'Verified partner' : ''].filter(Boolean),
@@ -420,7 +420,7 @@ function bulkForm(body) {
     <section class="card"><h2>Results</h2><div id="out"><p class="muted notop">Preview shows the courier and price for each row.</p></div></section></div>`;
   const t = body.querySelector('#csvT'); const err = body.querySelector('#e'); const out = body.querySelector('#out');
   const rows = () => { const lines = t.value.trim().split(/\r?\n/).filter(Boolean); if (lines.length < 2) throw new Error('Add a header line and at least one row.'); const keys = lines[0].split(',').map((k) => k.trim().toLowerCase()); return lines.slice(1).map((l) => { const c = l.split(','); return Object.fromEntries(keys.map((k, i) => [k, (c[i] || '').trim()])); }); };
-  const run = async (btn, dry) => { err.textContent = ''; await withBusy(btn, async () => { try { const r = await withFunds(() => api('/hub/transport/bulk', { method: 'POST', body: { rows: rows(), strategy: body.querySelector('#strat').value, pickup_address: body.querySelector('#pick').value, dry } })); out.innerHTML = `<p class="notop"><b>${r.booked} of ${r.results.length} rows ${dry ? 'can be booked' : 'booked'}</b> · <span translate="no">${esc(money(r.total))}</span></p><div class="table-wrap"><table><thead><tr><th>Row</th><th>Courier</th><th>Price or issue</th></tr></thead><tbody>${r.results.map((x) => `<tr><td>${x.n}</td><td>${x.ok ? esc(x.provider) : '—'}</td><td>${x.ok ? esc(money(x.total)) : `<span class="neg">${esc(x.error)}</span>`}</td></tr>`).join('')}</tbody></table></div>`; if (!dry) { refresh(); toast(`${r.booked} shipments booked`); } } catch (x) { if (!x.quiet) err.textContent = x.message; } }); };
+  const run = async (btn, dry) => { err.textContent = ''; await withBusy(btn, async () => { try { const req = { rows: rows(), strategy: body.querySelector('#strat').value, pickup_address: body.querySelector('#pick').value }; let r = await api('/hub/transport/bulk', { method: 'POST', body: { ...req, dry: true } }); if (!dry) { if (!r.total) throw new Error('No row can be booked. Fix the rows shown in the preview.'); r = await payWithApproval({ path: '/hub/transport/bulk', body: { ...req, dry: false }, total: r.total, info: { title: `Bulk booking · ${r.booked} rows`, payee: 'Couriers', icon: 'parcel', tone: 'amber', baseLabel: 'Freight' } }); if (!r) return; } out.innerHTML = `<p class="notop"><b>${r.booked} of ${r.results.length} rows ${dry ? 'can be booked' : 'booked'}</b> · <span translate="no">${esc(money(r.total))}</span></p><div class="table-wrap"><table><thead><tr><th>Row</th><th>Courier</th><th>Price or issue</th></tr></thead><tbody>${r.results.map((x) => `<tr><td>${x.n}</td><td>${x.ok ? esc(x.provider) : '—'}</td><td>${x.ok ? esc(money(x.total)) : `<span class="neg">${esc(x.error)}</span>`}</td></tr>`).join('')}</tbody></table></div>`; if (!dry) { refresh(); toast(`${r.booked} shipments booked`); } } catch (x) { if (!x.quiet) err.textContent = x.message; } }); };
   body.querySelector('#sample').addEventListener('click', () => { t.value = SAMPLE; });
   body.querySelector('#csvF').addEventListener('change', async (e) => { if (e.target.files[0]) t.value = await e.target.files[0].text(); });
   body.querySelector('#prev').addEventListener('click', (e) => run(e.currentTarget, true));

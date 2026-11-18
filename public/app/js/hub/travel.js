@@ -3,7 +3,7 @@ import { api, esc, money, store, toast, modal, withBusy, dateTime, formData } fr
 import { tile } from './art.js';
 import { deskTabs } from './desk.js';
 import { payMethods, BOOKING_PAY } from './checkout.js';
-import { walletCheckout } from './wallet-checkout.js';
+import { walletCheckout, payWithApproval } from './wallet-checkout.js';
 import { svcHero, BADGES } from './svc-hero.js';
 import { icon } from './icons.js';
 import { sortChips, tagBadges, star, payChoice, statusPill, emptyScene, withFunds, refresh, mountDeals, filterBtn, openFilters, countActive } from './ui.js';
@@ -39,6 +39,18 @@ const POPULAR = {
 const OFFER = { travel: { code: 'TRAVEL300', text: '₹300 off travel over ₹3,000' }, rides: { code: 'RIDE20', text: '20% off rides, up to ₹50' }, logistics: { code: 'FIRST100', text: '₹100 off your first booking over ₹300' } };
 window.addEventListener('ut:desk-settings', (e) => { Object.keys(KINDS).forEach((x) => { if ((KINDS[x].group ? 'services' : 'travel') === e.detail) delete memory[x]; }); });
 const TRIP = ['flight', 'bus', 'train'];
+const NOUN = { flight: 'flight', train: 'train', bus: 'bus' };
+const TOD = [['morning', 'Morning', '5 AM – 12 PM', 'sunrise'], ['afternoon', 'Afternoon', '12 – 5 PM', 'sun'], ['evening', 'Evening', '5 – 9 PM', 'sunset'], ['night', 'Night', '9 PM – 5 AM', 'moon']];
+const todOf = (min) => { const h = Math.floor(((min % 1440) + 1440) % 1440 / 60); return h >= 5 && h < 12 ? 'morning' : h < 17 ? 'afternoon' : h < 21 ? 'evening' : 'night'; };
+const todLabel = (min) => { const t = TOD.find((x) => x[0] === todOf(min)); return `<span class="tod tod--${t[0]}">${icon(t[3], 13)}${t[1]}</span>`; };
+const arrOf = (o) => (o.arr != null ? o.arr : (o.dep + o.mins) % 1440);
+const LEG_ICON = { flight: ['plane', 'blue'], train: ['train', 'green'], bus: ['bus', 'coral'] };
+const hm = (m) => `${Math.floor(m / 60)}h ${String(m % 60).padStart(2, '0')}m`;
+const day = (iso) => new Date(iso + 'T00:00:00').toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' });
+// One leg of a connecting journey, and the wait between legs.
+const hhmm = (t) => { const [h, m] = String(t).split(':').map(Number); return h * 60 + m; };
+const legRow = (l) => `<li class="conn-leg"><span class="conn-leg__ico">${tile(...LEG_ICON[l.kind]).value}</span><div class="conn-leg__m"><b>${esc(l.title)} ${todLabel(hhmm(l.dep))}</b><span><b translate="no">${esc(l.dep)}</b> → <b translate="no">${esc(l.arr)}</b>${l.next_day ? ' <em>+1 day</em>' : ''} · ${esc(hm(l.mins))}</span><small>${esc(l.provider)} · ${esc(l.sub)} · ${esc(day(l.date))}</small></div><span class="conn-leg__p" translate="no">${esc(money(l.price))}</span></li>`;
+const legsHtml = (o) => `<ol class="conn-legs">${legRow(o.legs[0])}<li class="conn-wait">${icon('clock', 15)}${esc(hm(o.layover))} to change at ${esc(o.change_at)}</li>${legRow(o.legs[1])}</ol>`;
 let catalog = null;
 let areas = null;
 
@@ -118,24 +130,56 @@ export async function render(view, { kind: key, query }) {
 
   function paint() {
     if (!mem.options) { out.innerHTML = ''; return; }
-    if (!mem.options.length) { out.innerHTML = `<div class="card">${emptyScene('No options found. Try different details.', null, 'carton')}</div>`; return; }
+    const conn = mem.conn || [];
+    const trip = TRIP.includes(k.api);
+    const noun = NOUN[k.api] || 'trip';
+    const poor = mem.state && mem.state !== 'ok';
+    mem.view = mem.view || (poor && conn.length ? 'conn' : 'direct');
+    if (!conn.length) mem.view = 'direct';
+    if (!mem.options.length && conn.length) mem.view = 'conn';
+    mem.tod = mem.tod || { dep: [], arr: [] };
+    const timeOk = (o) => o.dep == null || ((!mem.tod.dep.length || mem.tod.dep.includes(todOf(o.dep))) && (!mem.tod.arr.length || mem.tod.arr.includes(todOf(arrOf(o)))));
+    const why = mem.state === 'waitlist' ? `Every direct ${noun} on this date is waitlisted.` : mem.state === 'sold_out' ? `Every direct ${noun} on this date is sold out.` : mem.state === 'none' ? mem.note || `There is no direct ${noun} on this route.` : `Direct ${noun}s have seats too.`;
+    if (!mem.options.length && !conn.length) { out.innerHTML = `<div class="card">${emptyScene('No options found. Try different details.', null, 'carton')}</div>`; return; }
     mem.f = mem.f || { provider: '', max: '', rating: '' };
     const offFields = [{ key: 'provider', label: 'Provider', options: [['', 'All providers'], ...[...new Set(mem.options.map((o) => o.provider))].map((p) => [p, p])] }, { key: 'max', label: 'Maximum price (₹)', placeholder: 'Any' }, { key: 'rating', label: 'Minimum rating', options: [['', 'Any'], ['4', '4 and above'], ['4.3', '4.3 and above'], ['4.5', '4.5 and above']] }];
     paint.fields = offFields;
-    let list = mem.options.filter((o) => (!mem.f.provider || o.provider === mem.f.provider) && (!mem.f.max || o.price <= Number(mem.f.max)) && (!mem.f.rating || o.rating >= Number(mem.f.rating)));
+    let list = mem.options.filter((o) => (!mem.f.provider || o.provider === mem.f.provider) && (!mem.f.max || o.price <= Number(mem.f.max)) && (!mem.f.rating || o.rating >= Number(mem.f.rating)) && timeOk(o));
     if (mem.sort === 'fast') list.sort((a, b) => a.mins - b.mins || a.price - b.price);
     if (mem.sort === 'low') list.sort((a, b) => a.price - b.price);
     if (mem.sort === 'rating') list.sort((a, b) => b.rating - a.rating || a.price - b.price);
-    out.innerHTML = `<div class="results-head"><div class="row"><b>${list.length} options</b>${k.cal ? '<button class="link" id="setAlert" type="button">Set a price alert</button>' : ''}</div><div class="res-bar">${sortChips(mem.sort, sorts)}${filterBtn(countActive(offFields, mem.f), 'offF')}</div></div>
-      <ul class="offers">${list.map((o, n) => `<li class="offer" style="--i:${Math.min(n, 8)}">${rideIcon(o, k)}<div class="offer__m"><div class="row"><b>${esc(o.provider)}</b>${star(o.rating)}${tagBadges(o.tags)}</div><span>${esc(o.title)} · ${esc(o.sub)}</span><small>${o.meta.map(esc).join(' · ')}</small></div><div class="offer__r"><b translate="no">${esc(money(o.price))}</b><div class="row row--nw">${k.cal ? `<button class="btn btn-outline btn-sm" type="button" data-lock="${o.id}">Lock price</button>` : ''}<button class="btn btn-primary btn-sm" type="button" data-book="${o.id}">Book</button></div></div></li>`).join('')}</ul>`;
+    const connList = conn.filter((o) => (!mem.f.max || o.price <= Number(mem.f.max)) && timeOk(o));
+    if (mem.sort === 'fast') connList.sort((a, b) => a.mins - b.mins);
+    if (mem.sort === 'low') connList.sort((a, b) => a.price - b.price);
+    const freeDirect = mem.options.filter((o) => o.status === 'ok').length;
+    // Time chips, with how many trips leave in each part of the day.
+    const pool = mem.view === 'conn' ? conn : mem.options;
+    const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
+    // Small time chips: icon, part of day and how many trips; the hours show on hover.
+    const chips = (which, label) => `<div class="tchips" role="group" aria-label="${label} time"><span class="tchips__l">${label}</span>${TOD.map(([key, name, hint, ic]) => { const n = pool.filter((o) => o.dep != null && todOf(which === 'dep' ? o.dep : arrOf(o)) === key).length; const on = mem.tod[which].includes(key); return `<button type="button" class="tchip tchip--${key} ${on ? 'on' : ''}" data-tod="${which}:${key}" aria-pressed="${on}" title="${name} · ${hint}" ${n || on ? '' : 'disabled'}>${icon(ic, 14)}<span>${name}</span><em>${n}</em></button>`; }).join('')}</div>`;
+    const anyTime = mem.tod.dep.length || mem.tod.arr.length;
+    const timeHtml = trip ? `<div class="res-tool__times">${chips('dep', 'Departs')}${chips('arr', 'Arrives')}${anyTime ? '<button class="link tchips__clear" type="button" data-tod-clear>Clear</button>' : ''}</div>` : '';
+    const wait = mem.options.length - freeDirect;
+    const seg = conn.length ? `<div class="seg" role="tablist" aria-label="Journey type"><button type="button" role="tab" data-view="direct" aria-selected="${mem.view === 'direct'}" title="${freeDirect} with seats${wait ? `, ${wait} waitlisted or full` : ''}">Direct<em class="${mem.options.length && !freeDirect ? 'warn' : ''}">${mem.options.length ? (freeDirect || 'WL') : 0}</em></button><button type="button" role="tab" data-view="conn" aria-selected="${mem.view === 'conn'}" title="With confirmed seats on both legs">Connecting<em>${conn.length}</em></button></div>` : '';
+    const count = mem.view === 'conn' ? plural(connList.length, 'connecting journey', 'connecting journeys') : plural(list.length, `direct ${noun}`, `direct ${noun}s`);
+    const head = `<div class="card res-tool"><div class="res-tool__top">${seg}<div class="res-tool__count"><b>${count}</b>${k.cal ? '<button class="link" id="setAlert" type="button">Price alert</button>' : ''}</div><div class="res-bar">${sortChips(mem.sort, sorts)}${mem.view === 'direct' ? filterBtn(countActive(offFields, mem.f), 'offF') : ''}</div></div>${timeHtml}</div>`;
+    const none = '<div class="card"><p class="muted notop">Nothing leaves or arrives at those times. <button class="link" type="button" data-tod-clear>Clear times</button></p></div>';
+    let body;
+    if (mem.view === 'conn') {
+      body = `${poor ? `<p class="callout conn-why">${esc(why)} These journeys change once on the way, with a confirmed seat on both legs, booked and paid together.</p>` : ''}${connList.length ? `<ul class="conn-list">${connList.map((o, n) => `<li class="conn-card" style="--i:${Math.min(n, 8)}"><div class="conn-card__top"><div class="conn-card__t"><div class="row"><b>${esc(o.title)}</b>${tagBadges(o.tags)}<span class="badge badge-green">${icon('check', 12)}Confirmed seats</span></div><small>${esc(o.modes)} · ${esc(hm(o.mins))} in total · ${esc(o.meta[0])}</small></div><div class="conn-card__r"><b translate="no">${esc(money(o.price))}</b><button class="btn btn-primary btn-sm" type="button" data-cbook="${o.id}">Book both legs</button></div></div>${legsHtml(o)}</li>`).join('')}</ul>` : none}`;
+    } else {
+      const avail = (o) => (o.status === 'waitlist' ? '<span class="badge badge-amber">Waitlist</span>' : o.status === 'sold_out' ? '<span class="badge badge-red">Sold out</span>' : '');
+      body = `${poor && conn.length ? `<p class="callout conn-why">${esc(why)} <button class="link" type="button" data-view="conn">See ${conn.length} connecting journeys with confirmed seats</button></p>` : ''}${!mem.options.length ? `<div class="card"><p class="muted notop">${esc(why)}</p></div>` : list.length ? `<ul class="offers">${list.map((o, n) => `<li class="offer" style="--i:${Math.min(n, 8)}">${rideIcon(o, k)}<div class="offer__m"><div class="row"><b>${esc(o.provider)}</b>${star(o.rating)}${tagBadges(o.tags)}${avail(o)}</div><span>${esc(o.title)} · ${esc(o.sub)}</span><small class="offer__when">${o.dep != null ? todLabel(o.dep) : ''}${o.meta.map(esc).join(' · ')}</small></div><div class="offer__r"><b translate="no">${esc(money(o.price))}</b><div class="row row--nw">${k.cal && o.status === 'ok' ? `<button class="btn btn-outline btn-sm" type="button" data-lock="${o.id}">Lock price</button>` : ''}<button class="btn ${o.status === 'waitlist' ? 'btn-outline' : 'btn-primary'} btn-sm" type="button" data-book="${o.id}" ${o.status === 'sold_out' ? 'disabled' : ''}>${o.status === 'waitlist' ? 'Join waitlist' : 'Book'}</button></div></div></li>`).join('')}</ul>` : none}`;
+    }
+    out.innerHTML = `${head}${body}`;
   }
   async function search() {
     err.textContent = '';
     const d = formData(form);
     Object.assign(mem.form, d);
     out.innerHTML = '<div class="skeleton" style="height:90px;margin-bottom:10px"></div><div class="skeleton" style="height:90px"></div>';
-    try { const r = await api('/hub/search', { method: 'POST', body: { kind: k.api, service: k.service, ...d } }); mem.options = r.options; mem.f = null; paint(); calendar(d); }
-    catch (e) { mem.options = null; out.innerHTML = ''; err.textContent = e.message; view.querySelector('#cal').innerHTML = ''; }
+    try { const r = await api('/hub/search', { method: 'POST', body: { kind: k.api, service: k.service, ...d } }); mem.options = r.options; mem.conn = r.connections || []; mem.state = r.direct_state || 'ok'; mem.note = r.note || ''; mem.view = null; mem.tod = null; mem.f = null; paint(); calendar(d); }
+    catch (e) { mem.options = null; mem.conn = []; out.innerHTML = ''; err.textContent = e.message; view.querySelector('#cal').innerHTML = ''; }
   }
   // Cheapest fare per day for the next two weeks.
   async function calendar(d) {
@@ -184,7 +228,14 @@ export async function render(view, { kind: key, query }) {
       });
     }
     const lk = e.target.closest('[data-lock]');
-    if (lk) { const o = mem.options.find((x) => x.id === lk.dataset.lock); const fee = Math.min(499, Math.max(99, Math.round(o.price * 0.02))); return modal({ title: 'Lock this price', body: `<p class="notop">Hold <b translate="no">${esc(money(o.price))}</b> with ${esc(o.provider)} for 48 hours for <b translate="no">${esc(money(fee))}</b>. The fee comes off the price when you book.</p><p class="form-error" id="e"></p>`, footer: '<button class="btn btn-outline" data-close>Cancel</button><button class="btn btn-primary" id="y">Lock price</button>', onMount: (el, close) => el.querySelector('#y').addEventListener('click', async () => { try { await withFunds(() => api('/hub/lock', { method: 'POST', body: { offer_id: o.id } })); close(true); toast('Price locked for 48 hours'); refresh(); locks(); } catch (x) { if (!x.quiet) el.querySelector('#e').textContent = x.message; } }) }); }
+    if (lk) { const o = mem.options.find((x) => x.id === lk.dataset.lock); const fee = Math.min(499, Math.max(99, Math.round(o.price * 0.02))); return modal({ title: 'Lock this price', body: `<p class="notop">Hold <b translate="no">${esc(money(o.price))}</b> with ${esc(o.provider)} for 48 hours for <b translate="no">${esc(money(fee))}</b>. The fee comes off the price when you book.</p><p class="form-error" id="e"></p>`, footer: '<button class="btn btn-outline" data-close>Cancel</button><button class="btn btn-primary" id="y">Lock price</button>', onMount: (el, close) => el.querySelector('#y').addEventListener('click', async () => { try { close(true); const r = await payWithApproval({ path: '/hub/lock', body: { offer_id: o.id }, total: fee, info: { title: 'Price lock', payee: o.provider, icon: 'shield', tone: 'blue', baseLabel: 'Lock fee' } }); if (!r) return; toast('Price locked for 48 hours'); refresh(); locks(); } catch (x) { if (!x.quiet) el.querySelector('#e').textContent = x.message; } }) }); }
+    const tv = e.target.closest('[data-view]');
+    if (tv) { mem.view = tv.dataset.view; return paint(); }
+    const tc = e.target.closest('[data-tod]');
+    if (tc) { const [w, key] = tc.dataset.tod.split(':'); const l = mem.tod[w]; mem.tod[w] = l.includes(key) ? l.filter((x) => x !== key) : [...l, key]; return paint(); }
+    if (e.target.closest('[data-tod-clear]')) { mem.tod = { dep: [], arr: [] }; return paint(); }
+    const cb = e.target.closest('[data-cbook]');
+    if (cb) return book(mem.conn.find((o) => o.id === cb.dataset.cbook), k, () => { mem.conn = mem.conn.filter((o) => o.id !== cb.dataset.cbook); paint(); history(); });
     const b = e.target.closest('[data-book]');
     if (b) book(mem.options.find((o) => o.id === b.dataset.book), k, () => { mem.options = mem.options.filter((o) => o.id !== b.dataset.book); paint(); history(); });
   });
@@ -209,11 +260,11 @@ function seatMap(o) {
 function book(o, k, done, lock) {
   const p = store.state.profile || {};
   const trip = TRIP.includes(o.kind);
-  const sm = trip ? seatMap(o) : null;
+  const sm = trip && !o.connecting ? seatMap(o) : null;
   const flexFee = Math.max(99, Math.round(o.price * 0.06));
   modal({
     title: `Book ${k.title.toLowerCase() === 'local services' ? 'ride' : o.provider}`,
-    body: `<div class="confirm">${rideIcon(o, k)}<div><b>${esc(o.provider)}</b><small>${esc(o.title)} · ${esc(o.sub)}</small><small>${o.meta.map(esc).join(' · ')}</small></div><b class="confirm__p" translate="no">${esc(money(o.price))}</b></div>
+    body: `<div class="confirm">${rideIcon(o, k)}<div><b>${esc(o.provider)}</b><small>${esc(o.title)} · ${esc(o.sub)}</small><small>${o.meta.map(esc).join(' · ')}</small></div><b class="confirm__p" translate="no">${esc(money(o.price))}</b></div>${o.connecting ? `${legsHtml(o)}<p class="callout">One booking for both legs, each with its own PNR. Seats are assigned on each leg. If the first leg runs late and you miss the second, you can change it for free with Flexible protection.</p>` : ''}${o.status === 'waitlist' ? '<p class="callout">This ticket is waitlisted. It confirms only if seats free up; if it stays waitlisted, the fare is refunded to your wallet.</p>' : ''}
       <form class="form-grid" id="tf" novalidate><label class="field">${o.kind === 'ride' ? 'Rider name' : 'Traveller or guest name'}<input class="input" name="name" value="${esc(p.name || '')}"></label><label class="field">Mobile number<input class="input" name="phone" inputmode="numeric" maxlength="10" value="${esc(p.mobile || '')}"></label>
       <div class="field full"><span>Payment</span>${payChoice('pay_mode', { allowLater: o.pay_later, later: o.pay_later_label || 'Pay later', laterHint: 'Pay when you use the service' })}</div><div class="full" id="pmBox">${payMethods({ only: BOOKING_PAY })}<p class="pay-hint">Have a gift card? <button class="link" type="button" data-gc>Add it to your wallet</button> and pay with Wallet.</p></div>${sm ? sm.html : ''}${o.kind === 'flight' ? '<div class="field full"><span>Add-ons</span><div class="row"><label class="row"><input type="checkbox" class="check" data-add="bag"> Extra 15 kg bag (₹650)</label><label class="row"><input type="checkbox" class="check" data-add="meal"> Meal (₹350)</label></div></div>' : ''}${['flight', 'bus', 'train', 'hotel', 'stay'].includes(o.kind) ? `<label class="row full insure"><input type="checkbox" class="check" id="flex"><span>Flexible protection (${esc(money(flexFee))}) <small class="muted">Full refund on cancellation and one free date change. Without it, 25% is charged on cancelling.</small></span></label>` : ''}</form>${lock ? `<p class="callout">Locked price. Your ${esc(money(lock.fee))} lock fee comes off the total.</p>` : ''}<div id="deals"></div>
       <p class="muted small notop">${esc(o.provider)} provides this service. UT Log connects you and keeps the record. Demo booking: nothing is really reserved.</p><p class="form-error" id="tfErr"></p>`,
@@ -237,7 +288,7 @@ function book(o, k, done, lock) {
           if (d.pay_mode !== 'cod') {
             const check = await book_({ dry_run: true });
             const trip = ['flight', 'train', 'bus'].includes(o.kind);
-            r = await walletCheckout({ amount: check.amount, run: book_, info: { title: o.record_title || o.title, payee: o.provider, sub: o.record_sub || o.title || '', icon: { flight: 'plane', train: 'train', bus: 'bus', hotel: 'hotel', stay: 'bed', ride: 'ride' }[o.kind] || 'plane', tone: 'blue', baseLabel: 'Fare', refLabel: trip ? 'PNR' : 'Booking reference', refPrefix: trip ? 'PNR' : 'BK', rows: [['Traveller', `${d.name || ''} · ${d.phone || ''}`]] } });
+            r = await walletCheckout({ amount: check.amount, run: book_, info: { title: o.record_title || o.title, payee: o.provider, sub: o.record_sub || o.title || '', icon: { flight: 'plane', train: 'train', bus: 'bus', hotel: 'hotel', stay: 'bed', ride: 'ride' }[o.kind] || 'plane', tone: 'blue', baseLabel: 'Fare', refLabel: trip ? 'PNR' : 'Booking reference', refPrefix: trip ? 'PNR' : 'BK', rows: [['Traveller', `${d.name || ''} · ${d.phone || ''}`], ...(o.connecting ? [['Journey', `${o.modes} · change at ${o.change_at}`]] : [])] } });
             if (!r) return;
           } else r = await withFunds(() => book_({}));
           close(r); refresh(); done(); }

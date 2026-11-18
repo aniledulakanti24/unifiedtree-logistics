@@ -1,5 +1,6 @@
 // Overview: the CRM-style dashboard. Numbers are compared with the period before.
 import { api, esc, money, store, dateTime, date, toast, withBusy } from '../core.js';
+import { payWithApproval } from './wallet-checkout.js';
 import { tile } from './art.js';
 import { icon } from './icons.js';
 import { bars, hbars, statusPill, SECTION_ICON, withFunds, refresh } from './ui.js';
@@ -246,7 +247,9 @@ async function shipAll(done) {
     const w = await api('/hub/website');
     const ids = w.orders.filter((o) => o.status === 'pending').map((o) => o.id);
     if (!ids.length) { done(); return; }
-    const r = await withFunds(() => api('/hub/website/ship', { method: 'POST', body: { ids, by: 'cheapest' } }));
+    const d = await api('/hub/website/ship', { method: 'POST', body: { ids, by: 'cheapest', dry_run: true } });
+    const r = await payWithApproval({ path: '/hub/website/ship', body: { ids, by: 'cheapest' }, total: d.total, info: { title: `Ship ${d.count} channel ${d.count === 1 ? 'order' : 'orders'}`, payee: 'Delivery partners', icon: 'parcel', tone: 'amber', baseLabel: 'Shipping' } });
+    if (!r) return;
     toast(`${r.shipped} channel ${r.shipped === 1 ? 'order' : 'orders'} booked for ${money(r.amount)}${r.failed.length ? `. ${r.failed.length} not booked: ${r.failed[0].message}` : ''}`, !!r.failed.length);
     refresh(); done();
   } catch (x) { if (!x.quiet) toast(x.message, true); }

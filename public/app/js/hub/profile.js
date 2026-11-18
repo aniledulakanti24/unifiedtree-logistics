@@ -12,6 +12,7 @@ import { icon } from './icons.js';
 import { mountInstruments } from './instruments.js';
 import { mountFunding, mountTopups } from './wallet-funding.js';
 import { installApp } from './experience.js';
+import { mountPayApproval } from './payauth.js';
 import { LANGUAGES, getLanguage, getTheme, setTheme, setAccountType, askBusinessDetails, openLanguageMenu, openCurrencyMenu } from './prefs.js';
 
 // ---- summary (profile score + bell) --------------------------------------------------
@@ -32,7 +33,7 @@ export function whoAmI() {
   const { profile: p = {}, user = {}, accountType } = store.state;
   const name = p.name || user.name || user.email || user.mobile || 'Your account';
   const owner = !user.role || user.role === 'owner';
-  const role = owner ? (accountType === 'business' ? 'Account owner' : 'Personal account') : (user.role_name || user.role);
+  const role = owner ? (accountType === 'business' ? 'Business account' : 'Personal account') : (user.role_name || user.role);
   const org = accountType === 'business' ? `${p.company || 'Your business'} · Business` : 'UT Log · Personal';
   return { p, user, name, owner, role, org, business: accountType === 'business' };
 }
@@ -46,7 +47,7 @@ const ACCOUNT_ROWS = [
   ['map', 'Saved addresses', 'Pickup and drop places', '#/profile?tab=addresses'],
   ['card', 'Payment methods', 'UPI, cards, banks and wallets', '#/profile?tab=payments'],
   ['bell', 'Notifications', 'What you hear about, and where', '#/profile?tab=notifications'],
-  ['shield', 'Security', 'Two-step sign-in, password, devices', '#/profile?tab=security'],
+  ['shield', 'Security', 'Payment approval (PIN, password, OTP), sign-in, devices', '#/profile?tab=security'],
   ['users', 'Safety', 'Trusted contacts for live trips', '#/profile?tab=safety'],
   ['file', 'Privacy & data', 'Consents, download, delete account', '#/profile?tab=privacy'],
   ['clock', 'Activity log', 'Every change, by everyone', '#/activity'],
@@ -70,7 +71,7 @@ export function openDrawer() {
     <div class="acc-body">
       <section class="acc-card">
         <div class="acc-me">${avatar(me.name, 'pf-av--lg')}<div class="grow"><b>${esc(me.name)}</b><small>${esc(me.role)}</small><small>${esc(me.org)}</small></div></div>
-        ${me.owner ? `<div class="seg seg--full acc-type" role="group" aria-label="Account type"><button type="button" data-a="personal" aria-pressed="${!me.business}">Personal</button><button type="button" data-a="business" aria-pressed="${me.business}">Business</button></div>` : ''}
+        
         <a class="acc-view" href="#/profile">${icon('user', 18)}<span class="grow">View my profile</span>${CHEV}</a>
       </section>
       <p class="acc-label">Account</p>${ACCOUNT_ROWS.map(row).join('')}
@@ -95,7 +96,7 @@ export function openDrawer() {
     const t = e.target.closest('[data-th]');
     if (t) { setTheme(t.dataset.th); wrap.querySelectorAll('[data-th]').forEach((b) => b.setAttribute('aria-pressed', String(b === t))); return; }
     const a = e.target.closest('[data-a]');
-    if (a && a.dataset.a !== store.state.accountType) { try { await setAccountType(a.dataset.a); toast(`Switched to ${a.dataset.a} account`); close(); if (a.dataset.a === 'business' && !(store.state.profile || {}).business_address) askBusinessDetails(); window.dispatchEvent(new CustomEvent('ut:account')); } catch (x) { toast(x.message, true); } return; }
+    if (a && a.dataset.a !== store.state.accountType) { try { await setAccountType(a.dataset.a); const missing = a.dataset.a === 'business' && !(store.state.profile || {}).business_address; toast(missing ? 'Switched to Business. Add your business address in My profile to use it as your pickup.' : `Switched to ${a.dataset.a} account`); close(); window.dispatchEvent(new CustomEvent('ut:account')); } catch (x) { toast(x.message, true); } return; }
     if (e.target.closest('#pLang')) { openLanguageMenu(e.target.closest('#pLang')); return; }
     if (e.target.closest('#pCur')) { openCurrencyMenu(e.target.closest('#pCur')); return; }
     if (e.target.closest('#lo')) logout();
@@ -138,7 +139,7 @@ const PAGES = [
   ['addresses', 'map', 'Saved addresses', 'Pickup and drop places you use often', ['addresses']],
   ['payments', 'card', 'Payment methods', 'Default for your wallet, auto top-up, saved methods and receipts', ['funding', 'payments', 'topups']],
   ['notifications', 'bell', 'Notifications', 'What you hear about, and where', ['notifications']],
-  ['security', 'shield', 'Security', 'Two-step sign-in, password and devices', ['security', 'password', 'devices']],
+  ['security', 'shield', 'Security', 'Payment approval, two-step sign-in, password and devices', ['payapprove', 'security', 'password', 'devices']],
   ['safety', 'users', 'Safety', 'Trusted contacts for live trips', ['safety']],
   ['privacy', 'file', 'Privacy & data', 'Consents, your data and deleting your account', ['data']],
   ['business', 'building', 'Business details', 'Company, GSTIN, PAN, IEC and business address', ['business'], true],
@@ -193,6 +194,7 @@ export async function render(view, { query }) {
       ${card('funding', 'Wallet funding', 'How money gets into your wallet.', '<div id="wfBox"></div>', true)}
       ${card('topups', 'Top-ups and receipts', 'Every top-up, with a receipt and a monthly statement.', '<div id="tuBox"></div>', true)}
       ${card('payments', 'Payment methods', 'Saved for faster checkout. Cards keep only the last 4 digits.', `<div id="ins"></div><h3 class="pf-sub">Withdrawal account</h3><p class="muted small notop">Money you withdraw from your wallet goes here.</p><form class="form-grid" id="wdF" novalidate>${field('upi', 'UPI ID', p.upi, 'placeholder="name@bank"')}${field('holder', 'Account holder', p.bank.holder)}${field('account', 'Account number', p.bank.account, 'inputmode="numeric"')}${field('ifsc', 'IFSC', p.bank.ifsc, 'maxlength="11" style="text-transform:uppercase"')}${footer()}</form>`, true)}
+      ${card('payapprove', 'Payment approval', 'How you approve wallet and credit payments.', '<div id="paBox"></div>', true)}
       ${sec ? card('security', 'Two-step sign-in', sec.has_password ? 'After your password, enter a code sent to your mobile or email.' : 'Built into how you sign in.', sec.has_password ? `<div class="pf-status"><span class="badge ${sec.twofa ? 'badge-green' : ''}">${sec.twofa ? 'On' : 'Off'}</span><span class="grow muted small">${sec.twofa ? 'A code is asked for every email sign-in.' : 'Recommended for business accounts.'}</span><button class="btn ${sec.twofa ? 'btn-outline' : 'btn-primary'}" id="tf" type="button">${sec.twofa ? 'Turn off' : 'Turn on'}</button></div>` : '<p class="notop">You sign in with a one-time code sent to your mobile, so every sign-in is already two-step. Nothing to set up.</p>') : ''}
       ${sec ? card('password', 'Password', sec.has_password ? 'At least 8 characters, with a number.' : 'Not used for your account.', sec.has_password ? `<form class="form-grid" id="pwF" novalidate><label class="field full">Current password<input class="input" type="password" name="current" autocomplete="current-password"></label><label class="field">New password<input class="input" type="password" name="next" autocomplete="new-password"></label><label class="field">Confirm new password<input class="input" type="password" name="again" autocomplete="new-password"></label><p class="form-error full"></p><div class="full"><button class="btn btn-primary" type="submit">Change password</button></div></form>` : `<p class="notop">You sign in with a one-time code to <b>+91 ${esc(String(p.mobile || '').replace(/^(\d{2})\d{4}/, '$1••••'))}</b>. There is no password to remember or leak.</p>`) : ''}
       ${sec ? card('devices', 'Where you are signed in', `${sec.sessions.length} ${sec.sessions.length === 1 ? 'device' : 'devices'}`, `<ul class="feed">${[...sec.sessions].sort((a, b) => Number(b.current) - Number(a.current)).slice(0, 5).map((s) => `<li><span class="acc-ico">${icon(s.current ? 'phone' : 'columns', 18)}</span><div class="feed__t"><b>${esc(s.device)}</b><small>Session ${esc(s.id)}…</small></div>${s.current ? '<span class="badge badge-green">This device</span>' : ''}</li>`).join('')}</ul>${sec.sessions.length > 5 ? `<p class="muted small">And ${sec.sessions.length - 5} more.</p>` : ''}${sec.sessions.length > 1 ? '<button class="btn btn-outline mt-s" id="revoke" type="button">Sign out other devices</button>' : ''}`) : ''}
@@ -244,6 +246,7 @@ export async function render(view, { query }) {
   if (sectionOf('alerts')) sectionOf('alerts').addEventListener('click', (e) => { const t = e.target.closest('[data-th]'); if (t) { setTheme(t.dataset.th); sectionOf('alerts').querySelectorAll('[data-th]').forEach((b) => b.setAttribute('aria-pressed', String(b === t))); } });
   if (view.querySelector('#inst')) view.querySelector('#inst').addEventListener('click', installApp);
   // Security
+  if (view.querySelector('#paBox')) mountPayApproval(view.querySelector('#paBox'));
   const tf = view.querySelector('#tf');
   if (tf) tf.addEventListener('click', () => (sec.twofa ? turnOff2fa(again) : turnOn2fa(again)));
   const pw = view.querySelector('#pwF');

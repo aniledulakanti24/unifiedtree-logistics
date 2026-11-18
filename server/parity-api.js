@@ -11,7 +11,7 @@ const INTEGRATIONS = [['couriers', 'Courier partners', 'Blue Dart, Delhivery, Xp
 
 module.exports = function register(routes, { send, users }, ctx, engine, hubCtx, bizCtx) {
   const { iso, day, credit, COURIERS, memberships } = ctx;
-  const { hub, live, oops, text, takePayment, addRecord } = hubCtx;
+  const { hub, live, oops, text, takePayment, addRecord, requireApproval, approvalBudget } = hubCtx;
   const localDay = (t) => { const d = new Date(t); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
   const P = (h) => {
     if (!h.parity) h.parity = { alloc: [], ndr: {}, payments: [], integrations: {}, templates: [] };
@@ -69,6 +69,7 @@ module.exports = function register(routes, { send, users }, ctx, engine, hubCtx,
     const rows = (Array.isArray(body.rows) ? body.rows : []).slice(0, 200);
     if (!rows.length) throw oops(400, 'Add at least one row.');
     const by = body.strategy === 'fastest' ? (a, b) => Date.parse(a.eta) - Date.parse(b.eta) : (a, b) => a.total - b.total;
+    const budget = body.dry ? null : approvalBudget(h);
     const results = rows.map((row, n) => {
       try {
         const route = engine.resolveRoute({ from_place: row.from, to_place: row.to });
@@ -79,12 +80,14 @@ module.exports = function register(routes, { send, users }, ctx, engine, hubCtx,
         if (body.dry) return { n: n + 1, ok: true, provider: option.provider, total: option.total, from: input.from, to: input.to };
         if (!/^[6-9]\d{9}$/.test(row.phone || '')) throw new Error('Needs a 10-digit mobile number.');
         if (text(row.address, 200).length < 8) throw new Error('Needs a full delivery address.');
+        budget.take(option.total);
         takePayment(db, h, option.total, `${option.title} · ${option.provider}`);
         const { id } = engine.createBooking({ input, options: [option] }, option, { contact: { name: text(row.name, 60) || 'Receiver', phone: row.phone }, pickup_address: text(body.pickup_address, 200) || 'Saved pickup address', drop_address: text(row.address, 200) });
         addRecord(h, { id, booking_id: id, section: 'courier', title: option.title, provider: option.provider, sub: `${input.from} → ${input.to}`, amount: option.total, pay_mode: 'prepaid', status: 'BOOKED', label: 'Booking confirmed', weight: input.weight, drop_address: text(row.address, 200), receiver: { name: text(row.name, 60), phone: row.phone, consent: false } });
         return { n: n + 1, ok: true, id, provider: option.provider, total: option.total };
       } catch (e) { if (e.data || e.extra) throw e; return { n: n + 1, ok: false, error: e.message }; }
     });
+    if (budget) budget.done();
     send(res, 200, { results, booked: results.filter((r) => r.ok).length, total: results.filter((r) => r.ok).reduce((s, r) => s + r.total, 0) });
   });
 
@@ -115,7 +118,9 @@ module.exports = function register(routes, { send, users }, ctx, engine, hubCtx,
     h.locks = h.locks || [];
     if (h.locks.some((l) => l.offer.id === e.offer.id)) throw oops(409, 'This price is already locked.');
     const fee = Math.min(499, Math.max(99, Math.round(e.offer.price * 0.02)));
+    requireApproval(h, fee);
     takePayment(db, h, fee, `Price lock · ${e.offer.record_title}`);
+    delete h.payApproval;
     const lock = { id: newId('PL'), offer: e.offer, fee, expires: Date.now() + 48 * 3600000 };
     h.locks.push(lock);
     send(res, 200, lock);
@@ -156,12 +161,16 @@ module.exports = function register(routes, { send, users }, ctx, engine, hubCtx,
     const limit = localDay(Date.now() + 7 * day);
     const due = h.accounts.filter((a) => a.type !== 'fastag' && a.next_due && a.next_due <= limit && (!body.id || a.id === body.id));
     if (!due.length) throw oops(400, 'Nothing is due in the next 7 days.');
+    if (body.dry_run) return send(res, 200, { count: due.length, total: due.reduce((t, a) => t + a.amount, 0) });
+    const budget = approvalBudget(h);
     let paid = 0;
     due.forEach((a) => {
+      budget.take(a.amount);
       takePayment(db, h, a.amount, `${a.provider} · ${a.label}`);
       addRecord(h, { section: ['bill', 'transfer'].includes(a.type) ? 'bills' : 'recharge', kind: a.type, title: a.type === 'transfer' ? `${a.provider} · regular payment` : a.type === 'bill' ? 'Bill payment' : 'Mobile recharge', provider: a.provider, sub: a.label, amount: a.amount, pay_mode: 'prepaid' });
       a.next_due = localDay(Date.parse(a.next_due) + 30 * day); paid += a.amount;
     });
+    budget.done();
     send(res, 200, { count: due.length, paid, wallet_balance: db.balance });
   });
 

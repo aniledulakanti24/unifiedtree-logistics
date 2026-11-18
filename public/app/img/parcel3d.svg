@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <!-- A 3D cardboard parcel: three shaded faces, packing tape and a label. -->
+  <defs>
+    <linearGradient id="top" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#F4CE8E"/><stop offset="1" stop-color="#E0A85A"/></linearGradient>
+    <linearGradient id="left" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#D9984A"/><stop offset="1" stop-color="#C07F33"/></linearGradient>
+    <linearGradient id="right" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#B9762C"/><stop offset="1" stop-color="#95591B"/></linearGradient>
+    <linearGradient id="tape" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#F7E6C4"/><stop offset="1" stop-color="#E9CF9E"/></linearGradient>
+    <radialGradient id="shadow" cx=".5" cy=".5" r=".5"><stop offset="0" stop-color="#0B2A24" stop-opacity=".32"/><stop offset="1" stop-color="#0B2A24" stop-opacity="0"/></radialGradient>
+  </defs>
+  <ellipse cx="32" cy="57" rx="24" ry="5" fill="url(#shadow)"/>
+  <path d="M8 20 32 32v24L8 44z" fill="url(#left)"/>
+  <path d="M56 20 32 32v24l24-12z" fill="url(#right)"/>
+  <path d="M32 8 56 20 32 32 8 20z" fill="url(#top)"/>
+  <path d="M32 8 56 20 32 32 8 20z" fill="none" stroke="#FFF3DC" stroke-opacity=".55" stroke-width=".8" stroke-linejoin="round"/>
+  <path d="M18 15l4-2 24 12-4 2z" fill="url(#tape)"/>
+  <path d="M42 27l4-2v24l-4 2z" fill="#D9BC86"/>
+  <path d="M13 31.500l12 6v7l-12-6z" fill="#FFFFFF" fill-opacity=".92"/>
+  <path d="M15 34.200l8 4M15 36.600l6 3" stroke="#B9762C" stroke-width=".9" stroke-linecap="round"/>
+  <path d="M8 20 32 32 56 20" fill="none" stroke="#7A4612" stroke-opacity=".25" stroke-width=".6"/>
+</svg>

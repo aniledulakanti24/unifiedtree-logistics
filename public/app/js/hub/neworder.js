@@ -3,7 +3,7 @@
 //   service opens its own fields below. Results: the form folds into a one-line summary, the
 //   available vehicles (or courier speeds) show as icons, and tapping one lists its partners
 //   with one common sort and filter.
-import { api, esc, money, store, toast, date, dateTime, inrHint } from '../core.js';
+import { api, esc, money, store, toast, date, dateTime, inrHint, modal, scoped } from '../core.js';
 import { tile, vehicleImg } from './art.js';
 import { icon } from './icons.js';
 import { sortChips, filterBtn, openFilters, countActive, star } from './ui.js';
@@ -11,6 +11,7 @@ import { openPlacePicker } from './places.js';
 import { quickBook } from './transport.js';
 import { openTracking } from './tracking.js';
 import { modOn } from './workspace.js';
+import { alertsState, askAlerts } from './notify.js';
 
 const TYPES = [
   { key: 'vehicle', icon: 'bike', tone: 'green', title: 'Vehicle', desc: 'In the city, or vans and trucks between cities', label: 'Vehicle details', go: 'Show available vehicles' },
@@ -44,18 +45,29 @@ const initials = (n) => n.split(/\s+/).map((w) => w[0]).slice(0, 2).join('').toU
 const logo = (name) => `<span class="no-av" aria-hidden="true"><i>${esc(initials(name))}</i>${DOMAIN[name] ? `<img src="https://www.google.com/s2/favicons?domain=${DOMAIN[name]}&sz=64" alt="" width="28" height="28" onload="if (this.naturalWidth < 32) this.remove(); else this.classList.add('ok')" onerror="this.remove()">` : ''}</span>`;
 // Item types people add themselves, kept in this browser.
 const MINE = 'ut-my-categories';
-const myCats = () => { try { return JSON.parse(localStorage.getItem(MINE)) || []; } catch (e) { return []; } };
-const addCat = (c) => { const list = [c, ...myCats().filter((x) => x.toLowerCase() !== c.toLowerCase())].slice(0, 12); try { localStorage.setItem(MINE, JSON.stringify(list)); } catch (e) { /* private mode */ } };
+const myCats = () => { try { return JSON.parse(localStorage.getItem(scoped(MINE))) || []; } catch (e) { return []; } };
+const addCat = (c) => { const list = [c, ...myCats().filter((x) => x.toLowerCase() !== c.toLowerCase())].slice(0, 12); try { localStorage.setItem(scoped(MINE), JSON.stringify(list)); } catch (e) { /* private mode */ } };
 const MAX_ROWS = 20;
+const RECENT = 'ut-recent-trips';
+const recent = () => { try { return (JSON.parse(localStorage.getItem(scoped(RECENT))) || []).filter((r) => r && r.from && r.to && r.type); } catch (e) { return []; } };
+const keepTrip = () => {
+  if (isIntl() || !S.from || !S.to) return;
+  const t = { type: S.type, from: S.from, to: S.to, d: { weight: S.d.weight, category: S.d.category, pieces: S.d.pieces, helpers: S.d.helpers }, at: Date.now() };
+  const same = (r) => r.type === t.type && placeLabel(r.from) === placeLabel(t.from) && placeLabel(r.to) === placeLabel(t.to);
+  try { localStorage.setItem(scoped(RECENT), JSON.stringify([t, ...recent().filter((r) => !same(r))].slice(0, 4))); } catch (e) { /* private mode */ }
+};
+const TYPE_ICON = { vehicle: ['bike', 'green'], courier: ['parcel', 'amber'], logistics: ['truck', 'blue'] };
+let holdTimer = null;
 const unit = () => (S.type === 'courier' ? 'speed' : S.type === 'logistics' ? 'truck' : S.type === 'international' ? 'shipping option' : 'vehicle');
 const betweenCities = () => S.from && S.to && S.from.city && S.to.city && S.from.city !== S.to.city;
 
 // Kept while the app is open, so leaving and coming back keeps the draft.
 let S = null;
-const fresh = () => ({ scope: 'domestic', stage: 'form', from: null, to: null, type: '', d: { pay_mode: 'prepaid', pieces: 1, helpers: 0, when: 'now' }, quote: null, issue: null, group: '', selected: '', sort: 'best', f: { type: '', rating: '', max: '', cod: '' }, placed: null });
+const fresh = () => ({ scope: 'domestic', stage: 'form', from: null, to: null, type: '', d: { pay_mode: 'prepaid', pieces: 1, helpers: 0, when: 'now' }, quote: null, issue: null, group: '', selected: '', sort: 'best', f: { type: '', rating: '', max: '', cod: '' }, cmp: [], placed: null });
 
 export async function render(view, { query }) {
-  if (!S || query.get('fresh')) S = fresh();
+  const who = `${scoped('who')}|${store.state.accountType || ''}`;
+  if (!S || query.get('fresh') || S.who !== who) { S = fresh(); S.who = who; }
   const t = query.get('type');
   if ((t === 'international' || query.get('scope') === 'intl') && !isIntl()) { S.scope = 'intl'; S.type = 'international'; S.to = null; S.stage = 'form'; S.quote = null; S.group = ''; S.selected = ''; }
   else if (t && t !== 'international' && isIntl()) { S.scope = 'domestic'; S.to = null; }
@@ -129,10 +141,11 @@ function formCard(meta, dist) {
   return `<section class="card no-card">
     <form class="no-f" id="noF" novalidate>
       ${scopeSwitch()}
+      ${!isIntl() && recent().length ? `<div class="no-recent"><p class="no-recent__h">${icon('repeat', 14)}Repeat a trip <small>One tap shows prices</small></p><div class="no-recent__list">${recent().map((r, i) => `<button type="button" class="no-rt" data-rt="${i}">${tile(...(TYPE_ICON[r.type] || TYPE_ICON.vehicle)).value}<span><b>${esc(placeLabel(r.from))} → ${esc(placeLabel(r.to))}</b><small>${esc([TYPES.find((x) => x.key === r.type)?.title, r.d.weight && `${r.d.weight} kg`, r.d.category].filter(Boolean).join(' · '))}</small></span></button>`).join('')}</div></div>` : ''}
       ${sec(1, 'Where')}
       ${isIntl()
         ? `<div class="no-route">${placeBtn('from', S.from, 'Pickup address in India')}<i class="no-route__line" aria-hidden="true"></i><div class="no-intl"><span class="no-pin no-pin--to">${icon('globe', 18)}</span><div class="form-grid grow"><div class="field cty"><span class="req">Destination country</span><div class="cty__box"><span class="cty__flag" id="ctyFlag">${countryOf(d.country) ? flag(countryOf(d.country).code) : icon('globe', 18)}</span><input class="input cty__in" name="country_q" value="${esc(d.country || '')}" placeholder="Search ${COUNTRY_LIST.length || 194} countries" autocomplete="off" role="combobox" aria-expanded="false" aria-controls="ctyList" aria-autocomplete="list"><input type="hidden" name="country" value="${esc(d.country || '')}">${icon('chevron', 16).replace('class="li"', 'class="li cty__chev"')}</div><ul class="cty__list" id="ctyList" role="listbox" hidden></ul></div><label class="field"><span class="req">City</span><input class="input" name="to_city" value="${esc(d.to_city || '')}" placeholder="e.g. Dubai"></label><label class="field full"><span class="req">Delivery address</span><input class="input" name="to_addr" value="${esc(d.to_addr || '')}" placeholder="Building, street, area and postcode"></label></div></div></div>`
-        : `<div class="no-route">${placeBtn('from', S.from, 'Pickup address')}<i class="no-route__line" aria-hidden="true"></i>${placeBtn('to', S.to, 'Drop location')}</div>
+        : `<div class="no-route">${placeBtn('from', S.from, 'Pickup address')}<i class="no-route__line" aria-hidden="true"></i>${S.from || S.to ? `<button class="no-swap" type="button" data-swap aria-label="Swap pickup and drop" title="Swap pickup and drop"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 4v16M3 8l4-4 4 4M17 20V4M13 16l4 4 4-4"/></svg></button>` : ''}${placeBtn('to', S.to, 'Drop location')}</div>
       ${dist ? `<p class="no-dist">${icon('map', 14)}${dist.toFixed(1)} km${betweenCities() ? ' · between cities' : ' · same city'}</p>` : ''}`}
       ${sec(2, 'What')}
       <div class="form-grid">
@@ -150,6 +163,7 @@ function formCard(meta, dist) {
         <label class="field">Reference<input class="input" name="reference" value="${esc(d.reference || '')}" placeholder="Your order or invoice number"></label>
         <label class="row insure full"><input type="checkbox" class="check" name="insure" ${d.insure ? 'checked' : ''}> <span>Insure the goods <small class="muted">0.2%, minimum ₹30</small></span></label>
       </div></details>
+      ${!isIntl() ? '<div id="noInstant" class="no-instant" hidden aria-live="polite"></div>' : ''}
       <input type="hidden" name="pay_mode" value="prepaid">
       <p class="form-error" id="noErr"></p>
       <button class="btn btn-primary btn-block no-go" type="submit">${icon('search', 18)}${esc(T ? T.go : 'Show what is available')}</button>
@@ -177,8 +191,10 @@ function groups() {
   for (const o of S.quote.options) { const g = groupOf(S.type, o); if (!map.has(g)) map.set(g, []); map.get(g).push(o); }
   return map;
 }
+const groupName2 = (o) => (o.vehicle === 'parcel' ? 'Courier' : o.vehicle === 'ptl' ? 'Part load' : o.title.replace(/^Full truck · /, '').replace(/ · intercity$/, ''));
 function groupName(g) {
   if (S.type === 'courier') return (SPEEDS.find((s) => s[0] === g) || [, g])[1];
+  if (g === 'ptl') return 'Part load (shared truck)';
   const o = S.quote && S.quote.options.find((x) => x.vehicle === g);
   return o ? o.title.replace(/^Full truck · /, '').replace(/^Part load · /, '') : g;
 }
@@ -202,7 +218,7 @@ function resultsView(T, dist) {
 function partnerList() {
   const all = S.quote.options.filter((o) => groupOf(S.type, o) === S.group);
   const f = S.f;
-  let list = all.filter((o) => (!f.type || o.provider_type === f.type) && (!f.rating || o.rating >= Number(f.rating)) && (!f.max || o.total <= Number(f.max)) && (!f.cod || o.cod));
+  let list = all.filter((o) => (!f.type || o.provider_type === f.type) && (!f.rating || o.rating >= Number(f.rating)) && (!f.max || o.total <= Number(f.max)) && (!f.cod || o.cod) && (!f.back || o.backhaul));
   const eta = (o) => Date.parse(o.eta);
   if (S.sort === 'fast') list = [...list].sort((a, b) => eta(a) - eta(b) || a.total - b.total);
   if (S.sort === 'low') list = [...list].sort((a, b) => a.total - b.total);
@@ -210,6 +226,7 @@ function partnerList() {
   return { all, list };
 }
 const filterFields = () => [
+  ...(S.quote.options.some((o) => o.backhaul) ? [{ key: 'back', label: 'Return loads', options: [['', 'All trucks'], ['1', 'Only return-load discounts']] }] : []),
   { key: 'type', label: 'Partner type', options: [['', 'All partners'], ...[...new Set(S.quote.options.map((o) => o.provider_type))].map((t) => [t, t])] },
   { key: 'rating', label: 'Minimum rating', options: [['', 'Any'], ['4', '4 and above'], ['4.3', '4.3 and above'], ['4.5', '4.5 and above']] },
   { key: 'max', label: 'Maximum price (₹)', placeholder: 'Any' },
@@ -221,7 +238,12 @@ function partnerStep() {
   const badge = (o) => (o.kind === 'independent' && o.mode === 'local' ? `<span class="vbadge2 vbadge2--ut" title="Background, licence and vehicle checked by UT Log">${SHIELD}UT partner</span>` : o.verified ? `<span class="vbadge2" title="Licence, GST and KYC checked by UT Log">${SHIELD}Verified</span>` : '');
   const covers = (o) => (S.type !== 'international' ? '' : [/door to door/i.test(o.note || '') ? ['building', 'Door to door', 'route'] : ['plane', 'Airport to airport', 'route'], /customs/i.test(o.note || '') || o.kind === 'freight' ? ['file', 'Customs help', 'help'] : null, ['radar', 'Live tracking', 'track'], /receiver/i.test(o.note || '') ? ['alert', 'Duties paid by receiver', 'warn'] : null].filter(Boolean).map(([ic, t, k]) => `<em class="no-cov no-cov--${k}">${icon(ic, 12)}${t}</em>`).join(''));
   const codWith = all.filter((o) => o.cod).length;
-  return `<div class="no-bar">${sortChips(S.sort, SORTS)}${filterBtn(countActive(filterFields(), S.f), 'noFlt')}</div>
+  const lane = S.quote.lane;
+  const best = (key, lowWins) => [...all].sort((a, b) => (lowWins ? a[key] - b[key] : b[key] - a[key]))[0];
+  const laneCard = lane && all.length > 1 ? `<div class="no-lane"><p class="no-lane__h">${icon('radar', 15)}<b>This route's record</b><small>${lane.shipments.toLocaleString('en-IN')} shipments in the last ${lane.days} days</small></p><div class="no-lane__g"><span><small>Most on time</small><b>${esc(best('on_time').provider)}</b><em>${best('on_time').on_time}%</em></span>${S.type === 'courier' ? `<span><small>Fewest returned</small><b>${esc(best('rto_pct', true).provider)}</b><em>${best('rto_pct', true).rto_pct}%</em></span>` : ''}<span><small>Fewest claims</small><b>${esc(best('claims_pct', true).provider)}</b><em>${best('claims_pct', true).claims_pct}%</em></span>${all.some((o) => o.mine) ? (() => { const m = [...all].filter((o) => o.mine).sort((a, b) => b.mine.trips - a.mine.trips)[0]; return `<span class="no-lane__mine"><small>You book most</small><b>${esc(m.provider)}</b><em>${m.mine.trips} trip${m.mine.trips === 1 ? '' : 's'} · ${m.mine.delivered} delivered${m.mine.claims ? ` · ${m.mine.claims} claim${m.mine.claims === 1 ? '' : 's'}` : ''}</em></span>`; })() : ''}</div></div>` : '';
+  const stats = (o) => `${o.mine ? `<span class="no-stat no-stat--mine" title="From your own bookings">${icon('user', 11)}You: ${o.mine.trips} trip${o.mine.trips === 1 ? '' : 's'}${o.mine.claims ? ` · ${o.mine.claims} claim${o.mine.claims === 1 ? '' : 's'}` : ''}</span>` : ''}<span class="no-stat">${o.on_time}% on time</span>${S.type === 'courier' ? `<span class="no-stat ${o.rto_pct > 3 ? 'warn' : ''}">${o.rto_pct}% returned</span>` : ''}`;
+  const cmpOn = (o) => S.cmp.includes(o.id);
+  return `${laneCard}<div class="no-bar">${sortChips(S.sort, SORTS)}${filterBtn(countActive(filterFields(), S.f), 'noFlt')}</div>
     ${cod ? `<p class="no-codnote">${icon('cash', 16)}${codWith ? `You chose pay on delivery. ${codWith} of ${all.length} partners take it; the others are online-only.` : 'None of these partners take pay on delivery. Pick another vehicle, or <button class="link" type="button" data-editform>switch to Pay online</button>.'}</p>` : ''}
     ${list.length ? `<ul class="no-opts" role="radiogroup" aria-label="Partners">${list.map((o) => {
       const off = cod && !o.cod;
@@ -229,10 +251,11 @@ function partnerStep() {
       ${logo(o.provider)}
       <span class="grow"><span class="no-opt__h"><b>${esc(o.provider)}</b>${star(o.rating)}${badge(o)}</span>
         <span class="no-opt__m">${when(o)}</span>
-        <span class="no-opt__c">${covers(o)}${o.tags && o.tags[0] ? `<em class="no-tag no-tag--${o.tags[0].toLowerCase()}">${esc(o.tags[0])}</em>` : ''}</span></span>
-      <span class="no-opt__p"><b translate="no">${esc(money(o.total))}</b>${o.save ? `<small class="pos">${esc(money(o.save))} below avg</small>` : ''}</span><span class="no-radio" aria-hidden="true"></span></button></li>`;
+        <span class="no-opt__c">${covers(o)}${o.tags && o.tags[0] ? `<em class="no-tag no-tag--${o.tags[0].toLowerCase()}">${esc(o.tags[0])}</em>` : ''}${o.backhaul ? `<em class="no-back" title="This truck is heading back empty, so the trip costs less">${icon('repeat', 12)}Return load · ${o.backhaul.pct}% off</em>` : ''}${stats(o)}</span>${o.why && o.why.length && o.tags && o.tags.includes('Recommended') ? `<span class="no-why">${icon('check', 13)}${o.why.map(esc).join(' · ')}</span>` : ''}</span>
+      <span class="no-opt__p"><b translate="no">${esc(money(o.total))}</b>${o.save ? `<small class="pos">${esc(money(o.save))} below avg</small>` : ''}</span><span class="no-radio" aria-hidden="true"></span></button><label class="no-cmp ${cmpOn(o) ? 'on' : ''}"><input type="checkbox" data-cmp="${o.id}" ${cmpOn(o) ? 'checked' : ''} ${!cmpOn(o) && S.cmp.length >= 3 ? 'disabled' : ''}>Compare</label></li>`;
     }).join('')}</ul>`
     : `<p class="muted">No partner matches these filters. <button class="link" type="button" data-clearf>Clear filters</button></p>`}
+    ${S.cmp.length ? `<div class="no-cmpbar"><span>${S.cmp.length} of 3 picked</span><button class="link" type="button" data-cmpclear>Clear</button><button class="btn btn-primary btn-sm" type="button" data-cmpgo ${S.cmp.length < 2 ? 'disabled' : ''}>Compare ${S.cmp.length >= 2 ? S.cmp.length : ''} side by side</button></div>` : ''}
     <p class="opt-note">${all.length} partner${all.length === 1 ? '' : 's'} for ${esc(groupName(S.group))}. Sort and filters stay the same when you switch. "Below avg" compares each price with all ${S.quote.options.length} quotes for this trip. <a class="link" href="/pricing/#how" target="_blank" rel="noopener">How pricing works</a></p>`;
 }
 
@@ -244,6 +267,7 @@ function sideSummary(T, dist) {
   const row = (l, v) => (v ? `<div><dt>${l}</dt><dd>${v}</dd></div>` : '');
   return `<aside class="card no-sum ${sel ? 'no-sum--sel' : ''}" aria-live="polite"><h2>Order summary</h2>
     <dl class="no-sum__dl">${row('Pickup', S.from ? esc(placeLabel(S.from)) : '<span class="muted">Not set</span>')}${row('Drop', S.to ? esc(placeLabel(S.to)) : isIntl() && S.d.country ? esc([S.d.to_city, S.d.country].filter(Boolean).join(', ')) : '<span class="muted">Not set</span>')}${dist ? row('Distance', `${dist.toFixed(1)} km`) : ''}${row('Service', T ? esc(T.title) : '')}${S.quote ? row('Load', esc(detailLine())) : ''}${S.group ? row(T && T.key === 'courier' ? 'Speed' : T && T.key === 'international' ? 'Shipping' : 'Vehicle', esc(groupName(S.group))) : ''}${sel ? row('Partner', esc(sel.provider)) : ''}</dl>
+    ${sel && sel.fare ? `<details class="no-fare" ${matchMedia('(min-width: 1101px)').matches ? 'open' : ''}><summary>Fare details${icon('chevron', 15)}</summary><dl>${sel.fare.map((l) => `<div><dt>${esc(l.label)}${l.note ? `<small>${esc(l.note)}</small>` : ''}</dt><dd translate="no">${esc(money(l.amount))}</dd></div>`).join('')}${fee ? `<div><dt>Pay on delivery fee</dt><dd translate="no">${esc(money(fee))}</dd></div>` : ''}</dl>${sel.waiting ? `<p class="no-fare__w">${icon('clock', 13)}${esc(sel.waiting)}</p>` : ''}<p class="no-fare__w">${icon('shield', 13)}No other charges. Price held for <b id="noHold" translate="no">20:00</b></p></details>` : ''}
     ${sel ? `<div class="no-sum__total"><span>Total${fee ? ' incl. pay on delivery fee' : ''}</span><b translate="no">${esc(money(sel.total + fee))}</b></div><button class="btn btn-primary btn-block" type="button" id="noGo">Continue to pay</button>` : `<p class="muted small notop">${S.stage === 'form' ? 'Fill in the form to see prices.' : S.group ? 'Pick a partner to continue.' : `Pick a ${unit()}, then a partner.`}</p>`}
   </aside>`;
 }
@@ -253,12 +277,13 @@ function placedView() {
   const p = S.placed;
   return `<div class="no"><section class="card no-done"><div class="placed__tree no-done__tree" aria-hidden="true"></div><span class="placed__ok"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12 5 5 9-10"/></svg></span>
     <h1>Order placed</h1><small class="mono">${esc(p.id)}</small><p>${esc(p.provider)} · ${esc(p.from)} → ${esc(p.to)}</p><b class="no-done__p" translate="no">${esc(money(p.amount))}</b>
-    <div class="row no-done__a"><button class="btn btn-primary" type="button" id="noTrack">Live tracking</button><a class="btn btn-outline" href="#/my/orders/${esc(p.id)}">View order</a><button class="btn btn-outline" type="button" id="noAgain">New order</button></div></section></div>`;
+    <div class="row no-done__a"><button class="btn btn-primary" type="button" id="noTrack">Live tracking</button><a class="btn btn-outline" href="#/my/orders/${esc(p.id)}">View order</a><button class="btn btn-outline" type="button" id="noAgain">New order</button></div>${alertsState() === 'default' ? `<button class="no-alerts" type="button" id="noAlerts">${icon('bell', 16)}<span><b>Get updates on this device</b><small>Driver assigned, picked up, delivered</small></span></button>` : ''}</section></div>`;
 }
 function wirePlaced(view, again) {
   if (window.UTTree) window.UTTree.mount(view.querySelector('.no-done__tree'), { compact: true, now: true, seed: S.placed.id.length * 31 + S.placed.amount });
   view.querySelector('#noTrack').onclick = () => openTracking(S.placed.id);
-  view.querySelector('#noAgain').onclick = async () => { S = fresh(); await defaultPickup(); again(); };
+  const al = view.querySelector('#noAlerts'); if (al) al.onclick = async () => { const p = await askAlerts(); al.remove(); toast(p === 'granted' ? 'Alerts are on for this device' : 'Alerts are off. You can allow them in your browser settings.', p !== 'granted'); };
+  view.querySelector('#noAgain').onclick = async () => { S = { ...fresh(), who: S.who }; await defaultPickup(); again(); };
 }
 
 // ---- behaviour ------------------------------------------------------------------------------------
@@ -268,6 +293,19 @@ function wire(view, meta, again) {
   view.onclick = async (e) => {
     const t = e.target;
     if (t.closest('[data-editform]')) { S.stage = 'form'; S.selected = ''; again(); top(); return; }
+    const rt = t.closest('[data-rt]');
+    if (rt) {
+      const r = recent()[Number(rt.dataset.rt)]; if (!r) return;
+      S.scope = 'domestic'; S.type = r.type; S.from = r.from; S.to = r.to; S.d = { ...S.d, ...r.d, when: 'now', boxes: [] }; S.cmp = [];
+      rt.classList.add('is-busy');
+      await quote(); S.stage = 'results';
+      // Straight to the best match: its vehicle or speed opens with the recommended partner picked.
+      if (S.quote) { const first = S.quote.options[0]; S.group = groupOf(S.type, first); S.selected = first.id; }
+      again(); top(); return;
+    }
+    if (t.closest('[data-swap]')) { keepForm(f); [S.from, S.to] = [S.to, S.from]; S.quote = null; S.group = ''; S.selected = ''; again(); return; }
+    if (t.closest('[data-cmpclear]')) { S.cmp = []; again(); return; }
+    if (t.closest('[data-cmpgo]')) { compare(again); return; }
     const pl = t.closest('[data-place]');
     if (pl) {
       keepForm(f);
@@ -277,8 +315,11 @@ function wire(view, meta, again) {
       S[k] = p; S.quote = null; S.group = ''; S.selected = '';
       again(); return;
     }
+    const cb = t.closest('[data-cmp]');
+    if (cb) { const id = cb.dataset.cmp; S.cmp = cb.checked ? [...new Set([...S.cmp, id])].slice(0, 3) : S.cmp.filter((x) => x !== id); again(); return; }
+    if (t.closest('.no-cmp')) return;
     const g = t.closest('[data-g]');
-    if (g) { S.group = g.dataset.g; S.selected = ''; again(); const pnl = view.querySelector('.no-partners'); if (pnl) pnl.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); return; }
+    if (g) { S.group = g.dataset.g; S.selected = ''; S.cmp = []; again(); const pnl = view.querySelector('.no-partners'); if (pnl) pnl.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); return; }
     const s = t.closest('[data-sort]');
     if (s) { S.sort = s.dataset.sort; again(); return; }
     if (t.closest('[data-clearf]')) { S.f = { type: '', rating: '', max: '', cod: '' }; again(); return; }
@@ -287,6 +328,40 @@ function wire(view, meta, again) {
     if (o) { S.selected = o.dataset.id; again(); const b = view.querySelector('#noGo'); if (b && matchMedia('(max-width: 1100px)').matches) b.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); return; }
     if (t.closest('#noGo')) book(again);
   };
+  // The price is held for 20 minutes from the quote.
+  clearInterval(holdTimer);
+  const hold = view.querySelector('#noHold');
+  if (hold && S.quote && S.quote.expires_at) {
+    const tick = () => { const left = Math.max(0, Date.parse(S.quote.expires_at) - Date.now()); const m = Math.floor(left / 60000); hold.textContent = left ? `${m}:${String(Math.floor(left / 1000) % 60).padStart(2, '0')}` : 'expired, search again'; if (!document.body.contains(hold)) clearInterval(holdTimer); };
+    tick(); holdTimer = setInterval(tick, 1000);
+  }
+  if (f && !isIntl()) {
+    const box = view.querySelector('#noInstant');
+    const suits = (w) => (betweenCities() ? (w > 3500 ? 'logistics' : w >= 100 ? 'vehicle' : 'courier') : w >= 500 ? 'logistics' : 'vehicle');
+    let tmr = 0; let seq = 0;
+    const instant = async () => {
+      const w = Number(f.weight.value);
+      if (!box || !S.from || !S.to || !(w > 0)) { if (box) box.hidden = true; return; }
+      const type = S.type || suits(w); const mine = ++seq;
+      box.hidden = false; box.innerHTML = `<span class="no-instant__ico">${icon('search', 18)}</span><div class="grow"><small>Finding the best price…</small><i class="skeleton" style="display:block;height:14px;width:60%"></i></div>`;
+      const at = (p) => (type === 'courier' ? p.pincode || p.city : p.area && p.city ? `${p.area}, ${p.city}` : p.city || p.pincode);
+      try {
+        const q = await api('/hub/transport/quote', { method: 'POST', body: { section: type, segment: store.state.accountType === 'business' ? 'b2b' : 'b2c', from_place: at(S.from), to_place: at(S.to), weight: w, pieces: Number(f.pieces && f.pieces.value) || 1, category: f.category ? f.category.value : undefined, from_pt: S.from.lat ? { lat: S.from.lat, lng: S.from.lng } : undefined, to_pt: S.to.lat ? { lat: S.to.lat, lng: S.to.lng } : undefined } });
+        if (mine !== seq) return;
+        if (!q.options || !q.options.length) { box.innerHTML = `<span class="no-instant__ico">${icon('alert', 18)}</span><div class="grow"><small>No ${esc(TYPES.find((x) => x.key === type).title.toLowerCase())} for this trip yet. Try another service.</small></div>`; return; }
+        const best = q.options[0]; const T2 = TYPES.find((x) => x.key === type);
+        const when = best.eta_pickup_min || best.pickup_within_min ? `${best.eta_pickup_min || best.pickup_within_min} min to pickup` : `Delivers by ${date(best.eta)}`;
+        box.innerHTML = `<span class="no-instant__ico">${type === 'courier' ? tile('parcel', 'amber').value : `<img src="${vehicleImg(best.vehicle)}" alt="" width="56" height="38">`}</span>
+          <div class="grow"><small>Best price now · ${esc(T2.title)}${S.type ? '' : ' (suits this trip)'}</small><b translate="no">${esc(money(best.total))}<span> · ${esc(groupName2(best))}</span></b><small>${esc(best.provider)} · ★ ${Number(best.rating).toFixed(1)} · ${esc(when)}</small></div>
+          <div class="no-instant__a"><button class="btn btn-primary" type="button" data-instant>${icon('check', 16)}Book now</button><button class="link" type="button" data-instant-all>See all ${q.options.length}</button></div>`;
+        box.querySelector('[data-instant]').onclick = () => { keepForm(f); S.type = type; S.d = { ...S.d, pieces: Number(S.d.pieces) || 1, helpers: Number(S.d.helpers) || 0 }; S.quote = q; FASTEST = Math.min(...q.options.map(daysOf)); S.group = groupOf(type, best); S.selected = best.id; S.stage = 'results'; again(); book(again); };
+        box.querySelector('[data-instant-all]').onclick = () => { if (!S.type) { S.type = type; keepForm(f); } f.requestSubmit(); };
+      } catch (e) { if (mine === seq) box.innerHTML = `<span class="no-instant__ico">${icon('alert', 18)}</span><div class="grow"><small>${esc(e.message)}</small></div>`; }
+    };
+    const later = () => { clearTimeout(tmr); tmr = setTimeout(instant, 550); };
+    f.addEventListener('input', (e) => { if (['weight', 'pieces'].includes(e.target.name)) later(); });
+    instant();
+  }
   if (!f) return;
   // Searchable country picker: type to filter 194 countries by name, region or code.
   const cin = f.querySelector('.cty__in');
@@ -411,6 +486,34 @@ function book(again) {
   const form = document.createElement('form');
   form.innerHTML = `<input name="pay_mode" value="${esc(S.d.pay_mode || 'prepaid')}"><input name="reference" value="${esc(S.d.reference || '')}">`;
   const mem = { form: { from_place: S.from, to_place: S.to, from_addr: S.from.address, to_addr: S.to.address, pay_mode: S.d.pay_mode }, quote: S.quote, selected: S.selected, sample: false };
-  mem.onPlaced = () => { S.placed = mem.placed; toast('Order placed'); again(); };
+  mem.onPlaced = () => { keepTrip(); S.placed = mem.placed; toast('Order placed'); if (navigator.vibrate) navigator.vibrate(30); again(); };
   quickBook(S.type, mem, form);
+}
+
+// Side by side: up to three partners, every number that matters, and a button to pick one.
+function compare(again) {
+  const list = S.cmp.map((id) => S.quote.options.find((o) => o.id === id)).filter(Boolean);
+  if (list.length < 2) return;
+  const low = (fn) => Math.min(...list.map(fn)); const high = (fn) => Math.max(...list.map(fn));
+  const arrive = (o) => (S.type === 'vehicle' ? (o.eta_pickup_min || o.pickup_within_min || 0) + (o.trip_min || 0) : Date.parse(o.eta));
+  const rows = [
+    ['Price', (o) => money(o.total), (o) => o.total === low((x) => x.total)],
+    ['Arrives', (o) => (S.type === 'vehicle' ? `${(o.eta_pickup_min || o.pickup_within_min)} min pickup + ${o.trip_min} min` : date(o.eta)), (o) => arrive(o) === low(arrive)],
+    ['Rating', (o) => `★ ${Number(o.rating).toFixed(1)}`, (o) => o.rating === high((x) => x.rating)],
+    ['On time on this route', (o) => `${o.on_time}%`, (o) => o.on_time === high((x) => x.on_time)],
+    ...(S.type === 'courier' ? [['Returned to sender', (o) => `${o.rto_pct}%`, (o) => o.rto_pct === low((x) => x.rto_pct)]] : []),
+    ['Claims', (o) => `${o.claims_pct}% of trips`, (o) => o.claims_pct === low((x) => x.claims_pct)],
+    ['Carries', (o) => o.capacity || '', () => false],
+    ['Waiting', (o) => o.waiting || '', () => false],
+    ['CO₂ estimate', (o) => (o.co2 != null ? `${o.co2} kg` : ''), (o) => o.co2 === low((x) => x.co2)],
+  ];
+  modal({
+    title: 'Compare partners',
+    wide: true,
+    body: `<div class="table-wrap"><table class="cmp-t"><thead><tr><th></th>${list.map((o) => `<th>${logo(o.provider)}<b>${esc(o.provider)}</b><small>${esc(o.title)}</small></th>`).join('')}</tr></thead><tbody>${rows.map(([label, val, win]) => `<tr><th>${label}</th>${list.map((o) => `<td class="${win(o) ? 'win' : ''}">${esc(val(o))}</td>`).join('')}</tr>`).join('')}
+      <tr><th>Fare</th>${list.map((o) => `<td class="cmp-fare">${(o.fare || []).map((l) => `<span>${esc(l.label)}<b translate="no">${esc(money(l.amount))}</b></span>`).join('')}</td>`).join('')}</tr>
+      <tr><th></th>${list.map((o) => `<td><button class="btn btn-primary btn-sm" type="button" data-pick="${o.id}">Choose ${esc(o.provider)}</button></td>`).join('')}</tr></tbody></table></div><p class="muted small">Green marks the best value in each row. On-time, return and claim rates are this route's record over the last 90 days.</p>`,
+    footer: '<button class="btn btn-outline" data-close>Close</button>',
+    onMount(el, close) { el.addEventListener('click', (e) => { const b = e.target.closest('[data-pick]'); if (b) { S.selected = b.dataset.pick; close(); again(); } }); },
+  });
 }

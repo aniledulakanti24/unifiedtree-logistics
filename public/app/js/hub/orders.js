@@ -1,5 +1,6 @@
 // Orders and Returns: the cross-service lists, and the parts each service workspace reuses.
-import { api, esc, money, toast, modal, withBusy, dateTime, date, pager, formData } from '../core.js';
+import { api, esc, money, store, toast, modal, withBusy, dateTime, date, pager, formData } from '../core.js';
+import { walletCheckout } from './wallet-checkout.js';
 import { tile, scene } from './art.js';
 import { statusPill, withFunds, refresh, downloadCsv, filterBtn, openFilters, countActive, SECTION_LABEL } from './ui.js';
 import { popover } from './prefs.js';
@@ -257,7 +258,7 @@ export async function renderOrderDetail(view, { id }) {
       </dl></section>`;
 
   // Trips: a ticket.
-  const ticket = `<section class="card od-ticket"><div class="od-ticket__l"><small>${esc(x.provider)}</small><b>${esc(x.title)}</b><span>${esc(x.sub || '')}</span>${x.seats && x.seats.length ? `<em>Seats ${esc(x.seats.join(', '))}</em>` : ''}</div><div class="od-ticket__r">${x.pnr ? `<small>PNR</small><b class="mono">${esc(x.pnr)}</b>${copyBtn(x.pnr, 'PNR')}` : `<small>Booking</small><b class="mono">${esc(x.id)}</b>`}</div></section>`;
+  const ticket = x.legs && x.legs.length ? `<section class="card od-legs"><h2 class="notop">Connecting journey · change at ${esc(x.change_at || '')}</h2>${x.legs.map((l) => `<div class="od-ticket"><div class="od-ticket__l"><small>${esc(l.provider)} · ${esc(l.sub)}</small><b>${esc(l.title)}</b><span>${esc(l.date)} · ${esc(l.dep)} → ${esc(l.arr)}${l.next_day ? ' (+1 day)' : ''}</span></div><div class="od-ticket__r"><small>PNR</small><b class="mono">${esc(l.pnr)}</b>${copyBtn(l.pnr, 'PNR')}</div></div>`).join('')}</section>` : `<section class="card od-ticket"><div class="od-ticket__l"><small>${esc(x.provider)}</small><b>${esc(x.title)}</b><span>${esc(x.sub || '')}</span>${x.seats && x.seats.length ? `<em>Seats ${esc(x.seats.join(', '))}</em>` : ''}</div><div class="od-ticket__r">${x.pnr ? `<small>PNR</small><b class="mono">${esc(x.pnr)}</b>${copyBtn(x.pnr, 'PNR')}` : `<small>Booking</small><b class="mono">${esc(x.id)}</b>`}</div></section>`;
 
   const charges = `<section class="card od-charges"><h2 class="notop">Charges</h2><dl class="od-bill">
       ${(x.gross && x.gross !== x.amount) || x.fee || x.insurance ? `<div><dt>${SHIP.includes(x.section) || TRIP.includes(x.section) ? 'Fare' : 'Amount'}</dt><dd translate="no">${esc(money((x.gross || x.amount) - (x.fee || 0) - (x.insurance || 0)))}</dd></div>` : ''}
@@ -274,7 +275,8 @@ export async function renderOrderDetail(view, { id }) {
     ${x.can_return ? '<button class="btn btn-outline btn-block" id="ret" type="button">Create return</button>' : ''}
     <section class="card od-help"><b>Need help with this order?</b><small>Quote ${esc(x.id)}. Most questions are answered within an hour.</small><a class="btn btn-outline btn-sm" href="#/support?new=1&ref=${encodeURIComponent(x.id)}">${icon('chat', 15)}Chat with support</a></section>`;
 
-  const main = type === 'ship' ? `${x.status === 'CANCELLED' ? '' : progress}${route}<div class="od-two">${partner}${pkg}</div>${activity}`
+  const freight = x.freight ? '<section class="card od-freight" id="odFreight"><div class="skeleton" style="height:140px"></div></section>' : '';
+  const main = type === 'ship' ? `${x.status === 'CANCELLED' ? '' : progress}${freight}${route}<div class="od-two">${partner}${pkg}</div>${activity}`
     : type === 'trip' ? `${ticket}${route}${activity}`
       : receipt;
   view.innerHTML = `<div class="od">${hero}${x.sample ? '<p class="od-sample">This is a sample order from your account history.</p>' : ''}
@@ -288,6 +290,7 @@ export async function renderOrderDetail(view, { id }) {
   on('#again', () => rebook(x));
   on('#more', (e) => orderMenu(e.currentTarget, x, redo));
   on('#ret', () => createReturn(id, redo));
+  if (x.freight) freightCard(view.querySelector('#odFreight'), x, redo);
   view.querySelectorAll('[data-copy]').forEach((b) => b.addEventListener('click', async () => { try { await navigator.clipboard.writeText(b.dataset.copy); toast('Copied'); } catch (e) { toast(b.dataset.copy); } }));
 }
 
@@ -414,4 +417,75 @@ function rejectReturn(id, done) {
     footer: '<button class="btn btn-outline" data-close>Back</button><button class="btn btn-danger" id="y">Reject return</button>',
     onMount: (el, close) => el.querySelector('#y').addEventListener('click', async () => { try { await api('/hub/returns/reject', { method: 'POST', body: { id, note: el.querySelector('#n').value } }); close(true); toast('Return rejected'); done(); } catch (x) { el.querySelector('#e').textContent = x.message; } }),
   });
+}
+
+// ---- truck paperwork --------------------------------------------------------------------------
+// Consignment note (LR), e-way bill, proof of delivery and detention, in one card on the order.
+async function freightCard(el, x, redo) {
+  if (!el) return;
+  let f;
+  try { f = await api('/hub/freight', { query: { id: x.id } }); } catch (e) { el.remove(); return; }
+  const dt = f.detention; const e = f.ewb; const pod = f.pod;
+  const ewbLive = e && e.status === 'ACTIVE';
+  const left = ewbLive ? Math.max(0, Date.parse(e.valid_until) - Date.now()) : 0;
+  const doc = (ic, title, sub, state, actions) => `<li class="fd"><span class="fd__ico fd__ico--${state}">${icon(ic, 18)}</span><div class="grow"><b>${title}</b><small>${sub}</small></div><div class="fd__a">${actions}</div></li>`;
+  const wait = (m) => (m == null ? 'not yet' : `${Math.floor(m / 60)}h ${String(m % 60).padStart(2, '0')}m`);
+  el.innerHTML = `<div class="od-steps__h"><h2 class="notop">Freight documents</h2><span class="badge">${esc(f.vehicle || 'Truck')} · ${esc(f.vehicle_no || '')}</span></div>
+    <ul class="fd-list">
+      ${doc('file', `Consignment note <span class="mono">${esc(f.lr)}</span>`, 'The lorry receipt for this load. The driver carries it; the receiver signs it at delivery.', 'ok', '<button class="btn btn-outline btn-sm" type="button" data-fd="lr">View &amp; print</button>')}
+      ${doc('receipt', ewbLive ? `E-way bill <span class="mono">${esc(e.no)}</span>` : 'E-way bill', ewbLive ? `Valid until ${esc(dateTime(e.valid_until))} · ${Math.max(1, Math.round(left / 864e5))} day${Math.max(1, Math.round(left / 864e5)) === 1 ? '' : 's'} left · ${e.part_b ? `vehicle ${esc(e.vehicle_no)}` : 'vehicle not added yet'}` : e && e.status === 'CANCELLED' ? 'Cancelled. Generate a new one before the truck moves.' : f.needs_ewb ? '<b class="neg">Needed:</b> goods worth over ₹50,000 need an e-way bill before the truck moves.' : 'Needed when the goods are worth over ₹50,000. Generate one any time.', ewbLive ? 'ok' : f.needs_ewb ? 'warn' : 'off',
+        ewbLive ? '<button class="btn btn-outline btn-sm" type="button" data-fd="ewbprint">Print</button><button class="link" type="button" data-fd="ewbcancel">Cancel</button>' : '<button class="btn btn-primary btn-sm" type="button" data-fd="ewb">Generate</button>')}
+      ${doc('check', 'Proof of delivery', pod ? `Received by ${esc(pod.receiver_name)} · ${esc(dateTime(pod.at))}${pod.shortage || pod.damage ? ` · <b class="neg">${[pod.shortage && 'shortage', pod.damage && 'damage'].filter(Boolean).join(' and ')} noted</b>` : ''}` : 'Upload the signed LR or a photo at delivery. It settles the trip and any claim.', pod ? 'ok' : 'off', pod ? '<button class="btn btn-outline btn-sm" type="button" data-fd="podview">View</button>' : '<button class="btn btn-outline btn-sm" type="button" data-fd="pod">Upload</button>')}
+      ${doc('clock', `Detention (waiting) charges${dt.paid ? ' · paid' : dt.due ? ' · due' : dt.charge ? ' · estimate' : ''}`, `${dt.free_hours} hours free at each end, then ₹${dt.rate_per_hour} an hour. ${dt.loading_mins == null ? 'Loading has not started yet.' : `Loading took ${wait(dt.loading_mins)}${dt.unloading_mins == null ? ', unloading not yet.' : `, unloading ${wait(dt.unloading_mins)}.`}`}`, dt.paid ? 'ok' : dt.charge ? 'warn' : 'ok', `<b class="fd__amt ${dt.charge && !dt.paid ? 'neg' : ''}" translate="no">${dt.charge ? esc(money(dt.charge)) : '₹0'}</b>${dt.due ? '<button class="btn btn-primary btn-sm" type="button" data-fd="detpay">Pay</button>' : ''}`)}
+    </ul>`;
+  el.onclick = async (ev) => {
+    const b = ev.target.closest('[data-fd]'); if (!b) return;
+    const k = b.dataset.fd;
+    if (k === 'lr') return printLr(x, f);
+    if (k === 'detpay') { const run = (ex) => api('/hub/freight/detention/pay', { method: 'POST', body: { id: x.id, ...ex } }); const r = await walletCheckout({ amount: dt.due, run, info: { title: 'Detention charges', payee: x.provider, sub: `${dt.chargeable_hours} hour${dt.chargeable_hours === 1 ? '' : 's'} over the free time`, icon: 'clock', tone: 'amber', baseLabel: 'Detention', credit: store.state.accountType === 'business', refLabel: 'Order ID' } }); if (r) { toast('Detention paid'); redo(); } return; }
+    if (k === 'ewbprint') return printEwb(x, f);
+    if (k === 'podview') return modal({ title: 'Proof of delivery', body: `${pod.photo ? `<img class="pod-img" src="${pod.photo}" alt="Proof of delivery photo">` : '<p class="muted notop">No photo was attached.</p>'}<dl class="od-kv">${[['Received by', pod.receiver_name], ['At', dateTime(pod.at)], ['Remarks', pod.remarks || 'None'], ['Shortage', pod.shortage ? 'Yes' : 'No'], ['Damage', pod.damage ? 'Yes' : 'No']].map(([a, v]) => `<div><dt>${a}</dt><dd>${esc(v)}</dd></div>`).join('')}</dl>`, footer: '<button class="btn btn-primary" data-close>Done</button>' });
+    if (k === 'ewbcancel') { try { await api('/hub/freight/ewaybill/cancel', { method: 'POST', body: { id: x.id } }); toast('E-way bill cancelled'); redo(); } catch (er) { toast(er.message, true); } return; }
+    if (k === 'ewb') return modal({
+      title: 'Generate e-way bill',
+      body: `<p class="muted notop">Part A is your invoice; Part B is the truck, filled in from this booking (${esc(f.vehicle_no || 'vehicle pending')}). Valid for ${Math.max(1, Math.ceil((f.km || 300) / 200))} day${Math.ceil((f.km || 300) / 200) > 1 ? 's' : ''} for ${f.km || '—'} km.</p>
+        <form class="form-grid" id="ewF" novalidate><label class="field"><span class="req">Invoice number</span><input class="input" name="invoice_no" maxlength="16" placeholder="INV/2026/0142"></label><label class="field"><span class="req">Invoice value (₹)</span><input class="input" name="invoice_value" inputmode="numeric" value="${f.value || ''}"></label>
+        <label class="field"><span class="req">HSN code</span><input class="input" name="hsn" inputmode="numeric" maxlength="8" placeholder="e.g. 8471"></label><label class="field">Receiver GSTIN<input class="input" name="to_gstin" maxlength="15" placeholder="Leave blank if unregistered"></label></form>
+        <p class="callout">Demo: this mimics the government e-way bill system. Going live needs GSP access with your GSTIN.</p><p class="form-error" id="ewE"></p>`,
+      footer: '<button class="btn btn-outline" data-close>Cancel</button><button class="btn btn-primary" id="ewGo">Generate</button>',
+      onMount(m, close) { m.querySelector('#ewGo').addEventListener('click', () => withBusy(m.querySelector('#ewGo'), async () => { try { const r = await api('/hub/freight/ewaybill', { method: 'POST', body: { id: x.id, ...formData(m.querySelector('#ewF')) } }); close(true); toast(`E-way bill ${r.no} generated`); redo(); } catch (er) { m.querySelector('#ewE').textContent = er.message; } })); },
+    });
+    if (k === 'pod') return modal({
+      title: 'Upload proof of delivery',
+      body: `<form class="form-grid" id="pdF" novalidate><label class="field full"><span class="req">Received by</span><input class="input" name="receiver_name" value="${esc((x.receiver && x.receiver.name) || (x.places && x.places.drop && x.places.drop.contact && x.places.drop.contact.name) || '')}"></label>
+        <label class="field full">Photo of the signed LR<input class="input" type="file" name="photo" accept="image/*" capture="environment"></label>
+        <label class="field full">Remarks<input class="input" name="remarks" placeholder="e.g. 2 cartons wet, rest fine"></label>
+        <label class="row"><input type="checkbox" class="check" name="shortage"> Shortage</label><label class="row"><input type="checkbox" class="check" name="damage"> Damage</label></form><p class="form-error" id="pdE"></p>`,
+      footer: '<button class="btn btn-outline" data-close>Cancel</button><button class="btn btn-primary" id="pdGo">Save</button>',
+      onMount(m, close) {
+        m.querySelector('#pdGo').addEventListener('click', () => withBusy(m.querySelector('#pdGo'), async () => {
+          const fm = m.querySelector('#pdF'); const file = fm.photo.files[0];
+          let photo = null;
+          // Phone photos are shrunk to about 900 px so the upload stays small.
+          if (file) photo = await new Promise((ok) => { const img = new Image(); img.onload = () => { const k2 = Math.min(1, 900 / Math.max(img.width, img.height)); const c = document.createElement('canvas'); c.width = img.width * k2; c.height = img.height * k2; c.getContext('2d').drawImage(img, 0, 0, c.width, c.height); ok(c.toDataURL('image/jpeg', 0.7)); URL.revokeObjectURL(img.src); }; img.onerror = () => ok(null); img.src = URL.createObjectURL(file); });
+          try { await api('/hub/freight/pod', { method: 'POST', body: { id: x.id, receiver_name: fm.receiver_name.value, remarks: fm.remarks.value, shortage: fm.shortage.checked, damage: fm.damage.checked, photo } }); close(true); toast('Proof of delivery saved'); redo(); } catch (er) { m.querySelector('#pdE').textContent = er.message; }
+        }));
+      },
+    });
+  };
+}
+const docStyle = '<style>body{font:13px/1.5 Inter,Segoe UI,sans-serif;color:#15211E;max-width:760px;margin:24px auto;padding:24px;border:1px solid #CDD5D2;border-radius:10px}h1{font-size:18px;margin:0 0 4px}table{width:100%;border-collapse:collapse;margin:12px 0}td,th{border:1px solid #CDD5D2;padding:6px 8px;text-align:left;vertical-align:top}th{background:#F1F4F3;width:32%}.no{font:700 20px monospace;letter-spacing:.08em}.demo{padding:6px 10px;background:#FDF1DC;border-radius:6px}.sig{display:grid;grid-template-columns:1fr 1fr;gap:24px;margin-top:36px}.sig div{border-top:1px solid #15211E;padding-top:6px}</style>';
+function printLr(x, f) {
+  const w = window.open('', '_blank'); if (!w) { toast('Allow pop-ups to open the document.', true); return; }
+  w.document.write(`<!doctype html><meta charset="utf-8"><title>LR ${esc(f.lr)}</title>${docStyle}<h1>Consignment note (lorry receipt)</h1><div class="no">${esc(f.lr)}</div><p class="demo">Demo document from UT Log. Not valid for transport.</p>
+    <table><tr><th>Carrier</th><td>${esc(x.provider)}</td></tr><tr><th>Vehicle</th><td>${esc(f.vehicle || '')} · ${esc(f.vehicle_no || '')}</td></tr><tr><th>Consignor (from)</th><td>${esc(x.contact_name || '')}<br>${esc(x.pickup_address || '')}</td></tr><tr><th>Consignee (to)</th><td>${esc((x.receiver && x.receiver.name) || (x.places && x.places.drop && x.places.drop.contact && x.places.drop.contact.name) || '')}<br>${esc(x.drop_address || '')}</td></tr>
+    <tr><th>Goods</th><td>${esc((x.form && x.form.category) || 'General goods')} · ${esc(String(x.weight || ''))} kg${x.form && x.form.pieces > 1 ? ` · ${x.form.pieces} pieces` : ''}</td></tr><tr><th>Declared value</th><td>${x.declared ? esc(money(x.declared)) : 'Not declared'}</td></tr><tr><th>Freight</th><td>${esc(money(x.amount))} · paid (${esc(PAY_LABEL[x.pay_via] || 'wallet')})</td></tr><tr><th>E-way bill</th><td>${f.ewb && f.ewb.status === 'ACTIVE' ? esc(f.ewb.no) : 'Not generated'}</td></tr><tr><th>Booked</th><td>${esc(dateTime(x.at))} · order ${esc(x.id)}</td></tr></table>
+    <div class="sig"><div>Driver's signature</div><div>Receiver's signature and stamp</div></div><script>print()<\/script>`);
+  w.document.close();
+}
+function printEwb(x, f) {
+  const e = f.ewb; const w = window.open('', '_blank'); if (!w) { toast('Allow pop-ups to open the document.', true); return; }
+  w.document.write(`<!doctype html><meta charset="utf-8"><title>E-way bill ${esc(e.no)}</title>${docStyle}<h1>E-way bill</h1><div class="no">${esc(e.no)}</div><p class="demo">Demo document. Mimics the format of the government e-way bill.</p>
+    <table><tr><th>Generated</th><td>${esc(dateTime(e.at))}</td></tr><tr><th>Valid until</th><td>${esc(dateTime(e.valid_until))}</td></tr><tr><th>Approx. distance</th><td>${e.km} km</td></tr><tr><th>Invoice</th><td>${esc(e.invoice_no)} · ${esc(money(e.invoice_value))}</td></tr><tr><th>HSN</th><td>${esc(e.hsn)}</td></tr><tr><th>Receiver GSTIN</th><td>${esc(e.to_gstin || 'URP (unregistered)')}</td></tr><tr><th>From</th><td>${esc(x.pickup_address || '')}</td></tr><tr><th>To</th><td>${esc(x.drop_address || '')}</td></tr><tr><th>Part B · vehicle</th><td>${esc(e.vehicle_no || 'Pending')} · road</td></tr><tr><th>Transporter</th><td>${esc(x.provider)} · LR ${esc(f.lr)}</td></tr></table><script>print()<\/script>`);
+  w.document.close();
 }

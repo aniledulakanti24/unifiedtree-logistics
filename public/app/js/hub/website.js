@@ -2,6 +2,7 @@
 // WooCommerce…) and your own website. Orders from every channel land in one inbox; ship them with
 // the best courier or city vehicle. Shipped orders also appear in All Orders with the channel's order number.
 import { api, esc, money, toast, modal, withBusy, dateTime, formData } from '../core.js';
+import { payWithApproval } from './wallet-checkout.js';
 import { icon } from './icons.js';
 import { withFunds, refresh } from './ui.js';
 
@@ -167,7 +168,11 @@ export async function render(view, { query, head, tabLink }) {
           const sel = el.querySelector('[name=opt]:checked');
           if (!sel) { el.querySelector('#se').textContent = 'Pick a delivery partner.'; return; }
           try {
-            await withFunds(() => api('/hub/website/ship', { method: 'POST', body: { id, option_id: sel.value } }));
+            const d = await api('/hub/website/ship', { method: 'POST', body: { id, option_id: sel.value, dry_run: true } });
+            el.closest('.modal-backdrop').hidden = true;
+            const r = await payWithApproval({ path: '/hub/website/ship', body: { id, option_id: sel.value }, total: d.total, info: { title: `Ship ${o.platform} ${o.number}`, payee: 'Delivery partner', icon: 'parcel', tone: 'amber', baseLabel: 'Shipping' } });
+            el.closest('.modal-backdrop').hidden = false;
+            if (!r) return;
             close(true); toast(`${o.number} booked. Track it under Shipped.`); refresh(); again();
           } catch (x) { if (!x.quiet) el.querySelector('#se').textContent = x.message; }
         }));
@@ -176,7 +181,9 @@ export async function render(view, { query, head, tabLink }) {
   }
   async function shipMany(ids, by) {
     try {
-      const r = await withFunds(() => api('/hub/website/ship', { method: 'POST', body: { ids, by } }));
+      const d = await api('/hub/website/ship', { method: 'POST', body: { ids, by, dry_run: true } });
+      const r = await payWithApproval({ path: '/hub/website/ship', body: { ids, by }, total: d.total, info: { title: `Ship ${d.count} ${d.count === 1 ? 'order' : 'orders'}`, payee: 'Delivery partners', icon: 'parcel', tone: 'amber', baseLabel: 'Shipping' } });
+      if (!r) return;
       toast(`${r.shipped} ${r.shipped === 1 ? 'order' : 'orders'} booked for ${money(r.amount)}${r.failed.length ? `. ${r.failed.length} could not be booked: ${r.failed[0].message}` : ''}`, !!r.failed.length);
       refresh(); again();
     } catch (x) { if (!x.quiet) toast(x.message, true); }

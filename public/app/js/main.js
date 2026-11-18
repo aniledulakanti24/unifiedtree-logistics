@@ -1,5 +1,5 @@
 // App shell: auth gate, sidebar, hash router, top bar, command palette, preferences.
-import { api, getToken, store, money, esc, refreshCounts } from './core.js';
+import { api, getToken, store, money, esc, refreshCounts, toast } from './core.js';
 // Pages load when first opened, not at start-up. lazy() stands in for a module namespace:
 // calling X.render(...) imports the file once, then calls the real function.
 const loaded = new Map();
@@ -50,6 +50,8 @@ const accessPage = lazy(() => import('./hub/access.js'));
 const holidayPage = lazy(() => import('./hub/holidays.js'));
 const intel = lazy(() => import('./hub/intel.js'));
 const control = lazy(() => import('./hub/control.js'));
+const freight = lazy(() => import('./hub/freight.js'));
+import { startOrderAlerts } from './hub/notify.js';
 import { setupApp, maybeTour } from './hub/experience.js';
 import { installSmoothScroll, watchView, resetScroll, progressStart, progressDone } from './hub/motion.js';
 import { duo, scene, tile } from './hub/art.js';
@@ -89,7 +91,7 @@ const ROUTES = [
   ['pay/mobile', pay.renderMobile], ['pay/fastag', pay.renderFastag], ['pay/bills', bills.renderBills], ['pay/send', bills.renderSend], ['pay/vouchers', bills.renderVouchers], ['pay/gold', bills.renderGold], ['pay/business', pay.renderBusiness], ['autopay', pay.renderAutopay],
   ['wallet', wallet.render], ['profile', profile.render], ['rewards', insights.renderRewards], ['insights', insights.renderInsights],
   ['my/orders', hubOrders.renderOrders], ['my/orders/:id', hubOrders.renderOrderDetail], ['my/returns', hubOrders.renderReturns], ['my/weight', hubWeight.render], ['help', hubHelp.renderHelp], ['feedback', hubHelp.renderFeedback],
-  ['intel', intel.render], ['services/:kind', travel.render], ['business/spend', control.renderSpend], ['business/integrations', control.renderIntegrations],
+  ['intel', intel.render], ['services/:kind', travel.render], ['business/spend', control.renderSpend], ['business/integrations', control.renderIntegrations], ['business/credit', freight.renderCredit], ['business/carriers', freight.renderCarriers],
   ['holidays', holidayPage.render], ['business/access', accessPage.render],
   ['business/tracking', business.renderTracking], ['business/whatsapp', business.renderWhatsApp], ['business/gst', business.renderGst], ['business/notifications', business.renderNotifications],
   // Seller tools.
@@ -166,6 +168,8 @@ const NAV = [
   { group: 'Business', business: true },
   { key: 'b-track', label: 'Live Tracking', icon: 'radar', path: '#/business/tracking', mod: 'tracking', business: true, match: '^business/tracking' },
   { key: 'b-wa', label: 'WhatsApp', icon: 'whatsapp', path: '#/business/whatsapp', mod: 'whatsapp', business: true, match: '^business/whatsapp' },
+  { key: 'b-credit', label: 'Business credit', icon: 'card', path: '#/business/credit', mod: 'wallet', business: true, match: '^business/credit' },
+  { key: 'b-carriers', label: 'Carrier connections', icon: 'plug', path: '#/business/carriers', business: true, owner: true, match: '^business/carriers' },
   { key: 'b-gst', label: 'Single GST', icon: 'receipt', path: '#/business/gst', mod: 'gst', business: true, match: '^business/gst' },
 ];
 // Reachable from a tab or the profile menu, and still found by search.
@@ -323,9 +327,12 @@ document.getElementById('sideMe').addEventListener('click', profile.openDrawer);
 document.addEventListener('click', (e) => { if (e.target.closest('[data-gc]')) addMoney(1000, null, 'giftcard'); });
 document.getElementById('walletAdd').addEventListener('click', () => addMoney().then((ok) => { if (ok) route(); }));
 document.getElementById('bellBtn').addEventListener('click', (e) => profile.openNotifications(e.currentTarget));
-window.addEventListener('ut:account', () => route());
+window.addEventListener('ut:account', () => { renderUser({ user: store.state.user }); route(); });
 window.addEventListener('ut:currency', () => { renderUser(store.state); route(); });
 window.addEventListener('ut:refresh', () => { profile.refreshSummary(); loadCounts(); });
+// No signal: say so, and keep showing the last saved orders.
+const offBar = () => { let b = document.getElementById('offBar'); if (navigator.onLine) { if (b) { b.classList.add('is-back'); b.textContent = 'Back online'; setTimeout(() => b.remove(), 1600); } return; } if (!b) { b = document.createElement('div'); b.id = 'offBar'; b.className = 'off-bar'; b.setAttribute('role', 'status'); document.body.appendChild(b); } b.className = 'off-bar'; b.textContent = 'You are offline. Showing your last saved orders; booking needs a connection.'; };
+window.addEventListener('offline', offBar); window.addEventListener('online', offBar);
 setInterval(loadCounts, 30000);
 
 // Business accounts: new-notification badge, toasts and browser alerts.
@@ -395,5 +402,6 @@ const fixMenu = (data) => { data.forEach((m) => (m.children || []).forEach((c) =
       await route();
     }
     if (user.role === 'owner') maybeTour();
+    startOrderAlerts(); // order alerts on this device, if allowed
   } catch (err) { bootDone(); if (err.message !== 'Session expired') route(); }
 })();

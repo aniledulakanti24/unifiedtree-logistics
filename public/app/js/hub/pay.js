@@ -4,7 +4,7 @@ import { tile } from './art.js';
 import { icon } from './icons.js';
 import { deskTabs } from './desk.js';
 import { payMethods, PAY_LABEL } from './checkout.js';
-import { walletCheckout } from './wallet-checkout.js';
+import { payWithApproval, walletCheckout } from './wallet-checkout.js';
 import { svcHero, BADGES } from './svc-hero.js';
 import { emptyScene, statusPill, withFunds, refresh, filterBtn, openFilters, countActive } from './ui.js';
 
@@ -216,7 +216,7 @@ export async function renderAutopay(view) {
     } catch (err) { toast(err.message, true); load(); }
   });
   body.addEventListener('click', async (e) => {
-    if (e.target.closest('[data-pay-due]')) { try { const r = await withFunds(() => api('/hub/autopay/pay-due', { method: 'POST', body: {} })); toast(`Paid ${r.count} ${r.count === 1 ? 'bill' : 'bills'} · ${money(r.paid)}`); refresh(); load(); } catch (x) { if (!x.quiet) toast(x.message, true); } return; }
+    if (e.target.closest('[data-pay-due]')) { try { const d = await api('/hub/autopay/pay-due', { method: 'POST', body: { dry_run: true } }); const r = await payWithApproval({ path: '/hub/autopay/pay-due', total: d.total, info: { title: `Pay ${d.count} due ${d.count === 1 ? 'bill' : 'bills'}`, payee: 'Billers', icon: 'bill', tone: 'amber', baseLabel: 'Bills' } }); if (!r) return; toast(`Paid ${r.count} ${r.count === 1 ? 'bill' : 'bills'} · ${money(r.paid)}`); refresh(); load(); } catch (x) { if (!x.quiet) toast(x.message, true); } return; }
     const card = e.target.closest('[data-id]');
     if (!card) return;
     const id = card.dataset.id;

@@ -43,6 +43,7 @@ function googleMap(el, center, zoom) {
       if (onClick) m.addListener('click', onClick);
       return { move: (q, k) => { m.setPosition({ lat: q[0], lng: q[1] }); if (k) m.setIcon({ ...m.getIcon(), fillColor: COLOR[k] }); }, remove: () => m.setMap(null) };
     },
+    path(points, done) { const l = new g.Polyline({ map, path: points.map((p) => ({ lat: p[0], lng: p[1] })), strokeColor: done ? COLOR.pickup : '#9fb3ad', strokeOpacity: done ? 0.95 : 0.6, strokeWeight: done ? 5 : 4 }); return { set: (pts) => l.setPath(pts.map((p) => ({ lat: p[0], lng: p[1] }))), remove: () => l.setMap(null) }; },
     line(a, b) { const l = new g.Polyline({ map, path: [{ lat: a[0], lng: a[1] }, { lat: b[0], lng: b[1] }], strokeColor: COLOR.pickup, strokeOpacity: 0.55, strokeWeight: 3, geodesic: true }); return { remove: () => l.setMap(null) }; },
     fit(points) { if (!points.length) return; const b = new g.LatLngBounds(); points.forEach((p) => b.extend({ lat: p[0], lng: p[1] })); map.fitBounds(b, 48); },
     resize() {}, destroy() {},
@@ -62,6 +63,7 @@ function leafletMap(el, center, zoom) {
       if (onClick) m.on('click', onClick);
       return { move: (q, k) => { m.setLatLng(q); if (k) m.setStyle({ fillColor: COLOR[k] }); }, remove: () => m.remove() };
     },
+    path(points, done) { const l = L.polyline(points, { color: done ? COLOR.pickup : '#9fb3ad', opacity: done ? 0.95 : 0.6, weight: done ? 5 : 4, lineJoin: 'round' }).addTo(map); return { set: (pts) => l.setLatLngs(pts), remove: () => l.remove() }; },
     line(a, b) { const l = L.polyline([a, b], { color: COLOR.pickup, opacity: 0.55, weight: 3 }).addTo(map); return { remove: () => l.remove() }; },
     fit(points) { if (points.length) map.fitBounds(points, { padding: [40, 40], maxZoom: 14 }); },
     resize: () => map.invalidateSize(),

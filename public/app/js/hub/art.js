@@ -75,7 +75,10 @@ const DUO = {
 // Named icon. Colour comes from the surrounding --a / --b.
 export const duo = (name, cls = '') => raw(`<svg class="duo ${cls}" viewBox="0 0 24 24" aria-hidden="true">${DUO[name] || DUO.parcel}</svg>`);
 // A soft coloured tile holding an icon. Tones: green, amber, blue, coral, violet, rose.
-export const tile = (name, tone = 'green') => raw(`<span class="tile tile--${tone}">${duo(name).value}</span>`);
+const RENDER = { bike: '/assets/vehicles-png/scooter.png', auto: '/assets/vehicles-png/auto.png', van: '/assets/vehicles-png/mini.png', truck: '/assets/vehicles-png/truck14.png', parcel: '/app/img/parcel3d.svg', box2: '/app/img/parcel3d.svg', plane: '/app/img/plane.svg', ship: '/app/img/ship.svg' };
+export const tile = (name, tone = 'green') => raw(RENDER[name]
+  ? `<span class="tile tile--${tone} tile--3d"><img class="tile__img tile__img--${name}" src="${RENDER[name]}" alt="" loading="lazy" decoding="async"></span>`
+  : `<span class="tile tile--${tone}">${duo(name).value}</span>`);
 
 const person = (x, y, skin, hair, top) => `
   <circle cx="${x}" cy="${y}" r="21" fill="${skin}"/>

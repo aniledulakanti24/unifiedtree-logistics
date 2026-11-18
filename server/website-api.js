@@ -39,7 +39,7 @@ const MINUTES_PER_ORDER = 12; // per channel, while you're away: about one new o
 
 module.exports = function register(routes, { send }, ctx, engine, hubCtx) {
   const { iso, bookByKey } = ctx;
-  const { hub, hubOf, live, oops, text, takePayment, addRecord } = hubCtx;
+  const { hub, hubOf, live, oops, text, takePayment, addRecord, approvalBudget } = hubCtx;
   const keyIndex = require('./store').track('websiteKeys', new Map()); // sha256(store key) -> "owner|channelId"
   const sha = (s) => crypto.createHash('sha256').update(s).digest('hex');
   const pick = (a) => a[crypto.randomInt(0, a.length)];
@@ -149,6 +149,7 @@ module.exports = function register(routes, { send }, ctx, engine, hubCtx) {
     const st = storeOf(w, order.store_id);
     const pickupAddr = `${(st && st.name) || h.profile.company || 'My store'} warehouse, ${w.pickup}`;
     const contact = { name: text(h.profile.company || h.profile.name || (st && st.name) || 'Store', 60), phone: /^[6-9]\d{9}$/.test(h.profile.mobile || '') ? h.profile.mobile : '9876543210' };
+    if (h._budget) h._budget.take(amount);
     takePayment(db, h, amount, `${order.platform} ${order.number} · ${option.provider}`);
     const { id } = engine.createBooking({ input: q.input, section: q.section }, option, { contact, pickup_address: pickupAddr, drop_address: order.address });
     const rec = addRecord(h, { id, booking_id: id, section: q.section, title: option.title, provider: option.provider, provider_type: option.provider_type,
@@ -270,6 +271,15 @@ module.exports = function register(routes, { send }, ctx, engine, hubCtx) {
   });
   routes['POST /v1/hub/website/ship'] = hub(({ res, body, db, h }) => {
     const w = siteOf(h);
+    // What it will cost, before approving.
+    if (body.dry_run) {
+      const pick = (order) => { const q = optionsFor(w, order); const o = body.option_id ? (held.get(order.id) || { q }).q.options.find((x) => x.id === body.option_id) : choose(q.options, body.by === 'fastest' ? 'fastest' : body.by === 'cheapest' ? 'cheapest' : w.ship_by); return o ? o.total + codFee(order, o) : 0; };
+      const list = (body.option_id ? [body.id] : (Array.isArray(body.ids) ? body.ids.map(String).slice(0, 50) : [])).map((id) => w.orders.find((o) => o.id === id && o.status === 'pending')).filter(Boolean);
+      return send(res, 200, { count: list.length, total: list.reduce((t, o) => t + pick(o), 0) });
+    }
+    Object.defineProperty(h, '_budget', { value: approvalBudget(h), writable: true, configurable: true, enumerable: false });
+    try { return shipRoute(); } finally { h._budget.done(); h._budget = null; }
+    function shipRoute() {
     if (body.option_id) {
       const order = w.orders.find((o) => o.id === body.id && o.status === 'pending');
       if (!order) throw oops(400, 'This order is already shipped or cancelled.');
@@ -279,6 +289,7 @@ module.exports = function register(routes, { send }, ctx, engine, hubCtx) {
     const ids = Array.isArray(body.ids) ? body.ids.map(String).slice(0, 50) : [];
     if (!ids.length) throw oops(400, 'Pick at least one order to ship.');
     send(res, 200, { ...ship(db, h, ids, body.by === 'fastest' ? 'fastest' : body.by === 'cheapest' ? 'cheapest' : w.ship_by), wallet_balance: db.balance });
+    }
   });
   routes['POST /v1/hub/website/cancel'] = hub(({ res, body, h }) => {
     const order = siteOf(h).orders.find((o) => o.id === body.id);

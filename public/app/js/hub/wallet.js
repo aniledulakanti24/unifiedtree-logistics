@@ -1,5 +1,6 @@
 // Central wallet: every service pays from here, prepaid; pay-on-delivery is tracked here too.
 import { api, esc, money, moneyIn, getCurrency, toast, modal, dateTime, pager, withBusy, inrHint, store } from '../core.js';
+import { payWithApproval } from './wallet-checkout.js';
 import { tile } from './art.js';
 import { icon } from './icons.js';
 import { ART } from './wallet-art.js';
@@ -111,7 +112,7 @@ function withdraw(balance, done) {
       input.addEventListener('input', () => { el.querySelector('#fx').textContent = inrHint(input.value); });
       el.addEventListener('click', (e) => { if (e.target.closest('a')) close(); });
       const go = el.querySelector('#go');
-      go.addEventListener('click', () => withBusy(go, async () => { try { await api('/hub/wallet/withdraw', { method: 'POST', body: { amount: input.value } }); toast('Withdrawal recorded'); refresh(); close(true); done(); } catch (e) { el.querySelector('#err').textContent = e.message; } }));
+      go.addEventListener('click', () => withBusy(go, async () => { try { const amt = Math.round(Number(input.value)); if (!(amt >= 100)) throw new Error('Withdraw at least ₹100.'); el.closest('.modal-backdrop').hidden = true; const r = await payWithApproval({ path: '/hub/wallet/withdraw', body: { amount: amt }, total: amt, info: { title: 'Withdraw to bank', payee: 'your bank account', icon: 'bank', tone: 'blue', baseLabel: 'Withdrawal' } }); el.closest('.modal-backdrop').hidden = false; if (!r) return; toast('Withdrawal recorded'); refresh(); close(true); done(); } catch (e) { el.querySelector('#err').textContent = e.message; } }));
     },
   });
 }

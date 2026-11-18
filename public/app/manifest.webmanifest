@@ -30,9 +30,9 @@
   "orientation": "portrait",
   "shortcuts": [
     {
-      "name": "Book a vehicle",
-      "short_name": "Vehicle",
-      "url": "./#/vehicle/book",
+      "name": "New order",
+      "short_name": "New order",
+      "url": "./#/new-order",
       "icons": [
         {
           "src": "icon-192.png",
@@ -41,20 +41,20 @@
       ]
     },
     {
-      "name": "Send a courier",
-      "short_name": "Courier",
-      "url": "./#/courier/book",
-      "icons": [
-        {
-          "src": "icon-192.png",
-          "sizes": "192x192"
-        }
-      ]
-    },
-    {
-      "name": "My orders",
-      "short_name": "Orders",
+      "name": "Track an order",
+      "short_name": "Track",
       "url": "./#/my/orders",
+      "icons": [
+        {
+          "src": "icon-192.png",
+          "sizes": "192x192"
+        }
+      ]
+    },
+    {
+      "name": "Book a truck",
+      "short_name": "Truck",
+      "url": "./#/new-order?type=logistics",
       "icons": [
         {
           "src": "icon-192.png",

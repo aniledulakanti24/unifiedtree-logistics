@@ -9,17 +9,22 @@ const holidays = require('./holidays');
 const hash = (s) => crypto.createHash('md5').update(String(s)).digest().readUInt32BE(0);
 const newId = (p) => p + Date.now().toString(36).toUpperCase().slice(-5) + crypto.randomBytes(2).toString('hex').toUpperCase();
 const oops = (status, message, extra) => Object.assign(new Error(message), { status, extra });
+// No direct trip on this route: the search then looks for a connecting journey instead.
+const noDirect = (message) => Object.assign(oops(400, message), { noDirect: true });
 const text = (v, max = 120) => String(v == null ? '' : v).trim().slice(0, max);
 
 // ---- catalogue (demo data) -----------------------------------------------------
 const AIRPORTS = [
   ['BLR', 'Bengaluru', 13.2, 77.7], ['BOM', 'Mumbai', 19.09, 72.87], ['DEL', 'Delhi', 28.56, 77.1], ['HYD', 'Hyderabad', 17.24, 78.43], ['MAA', 'Chennai', 12.99, 80.17],
   ['CCU', 'Kolkata', 22.65, 88.45], ['PNQ', 'Pune', 18.58, 73.92], ['AMD', 'Ahmedabad', 23.07, 72.63], ['COK', 'Kochi', 10.15, 76.4], ['GOI', 'Goa', 15.38, 73.83], ['JAI', 'Jaipur', 26.82, 75.81],
+  ['BHO', 'Bhopal', 23.29, 77.34, 0, ['DEL', 'BOM', 'HYD']], ['NAG', 'Nagpur', 21.09, 79.05, 0, ['DEL', 'BOM', 'BLR', 'HYD']], ['IDR', 'Indore', 22.72, 75.8, 0, ['DEL', 'BOM', 'BLR', 'HYD']], ['VNS', 'Varanasi', 25.45, 82.86, 0, ['DEL', 'BOM', 'BLR']], ['IXB', 'Bagdogra', 26.68, 88.33, 0, ['DEL', 'CCU', 'BLR']], ['IXZ', 'Port Blair', 11.64, 92.73, 0, ['MAA', 'CCU', 'DEL']], ['MYQ', 'Mysuru', 12.23, 76.66, 0, ['HYD', 'MAA']],
   ['DXB', 'Dubai', 25.25, 55.36, 1], ['SIN', 'Singapore', 1.36, 103.99, 1], ['BKK', 'Bangkok', 13.69, 100.75, 1], ['LHR', 'London', 51.47, -0.45, 1], ['FRA', 'Frankfurt', 50.03, 8.57, 1], ['JFK', 'New York', 40.64, -73.78, 1], ['YYZ', 'Toronto', 43.68, -79.63, 1], ['SYD', 'Sydney', -33.95, 151.18, 1],
 ];
 const AIRLINES = [['IndiGo', 0.98, 4.3], ['Air India', 1.12, 4.1], ['Akasa Air', 0.95, 4.4], ['SpiceJet', 0.9, 3.8], ['Air India Express', 0.88, 4.0]];
 const INTL_AIRLINES = [['Emirates', 1.25, 4.7], ['Singapore Airlines', 1.3, 4.8], ['Qatar Airways', 1.22, 4.7], ['Lufthansa', 1.18, 4.3], ['Air India', 1, 4.0], ['IndiGo', 0.9, 4.2]];
-const BUS_CITIES = [['Bengaluru', 12.97, 77.59], ['Chennai', 13.08, 80.27], ['Hyderabad', 17.39, 78.49], ['Mumbai', 19.08, 72.88], ['Pune', 18.52, 73.86], ['Delhi', 28.61, 77.21], ['Jaipur', 26.91, 75.79], ['Goa', 15.5, 73.83], ['Kochi', 9.93, 76.27], ['Mysuru', 12.3, 76.65], ['Vijayawada', 16.51, 80.65], ['Ahmedabad', 23.02, 72.57]];
+const BUS_CITIES = [['Bengaluru', 12.97, 77.59], ['Chennai', 13.08, 80.27], ['Hyderabad', 17.39, 78.49], ['Mumbai', 19.08, 72.88], ['Pune', 18.52, 73.86], ['Delhi', 28.61, 77.21], ['Jaipur', 26.91, 75.79], ['Goa', 15.5, 73.83], ['Kochi', 9.93, 76.27], ['Mysuru', 12.3, 76.65], ['Vijayawada', 16.51, 80.65], ['Ahmedabad', 23.02, 72.57], ['Bhopal', 23.26, 77.41], ['Nagpur', 21.15, 79.09], ['Indore', 22.72, 75.86], ['Solapur', 17.66, 75.91], ['Surat', 21.17, 72.83], ['Vadodara', 22.31, 73.18], ['Nashik', 20.0, 73.79]];
+// Train routes that are always full in this demo, so connecting journeys show.
+const BUSY_TRAINS = new Set(['Hyderabad|Mumbai', 'Mumbai|Hyderabad', 'Delhi|Mumbai', 'Mumbai|Delhi']);
 const BUS_OPERATORS = [['VRL Travels', 1, 4.2, 'AC sleeper'], ['SRS Travels', 0.94, 4.0, 'Non-AC sleeper'], ['Orange Tours', 1.12, 4.4, 'Volvo AC sleeper'], ['KSRTC Airavat', 1.02, 4.3, 'Volvo AC seater'], ['APSRTC Garuda', 0.92, 4.0, 'AC seater'], ['IntrCity SmartBus', 1.18, 4.5, 'AC sleeper'], ['Zingbus', 1.06, 4.3, 'AC seater']];
 const STAY_CITIES = ['Bengaluru', 'Mumbai', 'Delhi', 'Hyderabad', 'Chennai', 'Pune', 'Kolkata', 'Jaipur', 'Goa', 'Kochi', 'Dubai', 'Singapore', 'London', 'Bangkok'];
 const HOTELS = [['Taj', 'Taj Residency', 9800, 4.8], ['ITC Hotels', 'ITC Grand', 9200, 4.7], ['Marriott', 'Courtyard by Marriott', 7600, 4.5], ['Lemon Tree', 'Lemon Tree Premier', 4600, 4.2], ['Ginger', 'Ginger Hotel', 2900, 4.0], ['Treebo', 'Treebo Trend', 2100, 4.0], ['FabHotels', 'FabHotel Prime', 1800, 3.9], ['OYO', 'OYO Townhouse', 1300, 3.7]];
@@ -188,6 +193,8 @@ module.exports = function register(routes, { send }, ctx, engine) {
   const hub = (fn) => seller(async (c) => {
     const actorHub = hubOf(c.db, c.user);
     Object.defineProperty(actorHub, '_actor', { value: { key: c.user.key, role: c.role }, writable: true, configurable: true, enumerable: false });
+    Object.defineProperty(actorHub, '_req', { value: { body: c.body || {} }, writable: true, configurable: true, enumerable: false });
+    sweepWaitlists(c.db, actorHub);
     try { await fn({ ...c, h: actorHub, owner: c.ownerKey }); }
     catch (err) {
       if (err.status) return send(c.res, err.status, { message: err.message, ...(err.extra || {}) });
@@ -240,8 +247,22 @@ module.exports = function register(routes, { send }, ctx, engine) {
     if (noCard && NO_CARD.includes(p.method)) throw oops(400, 'This cannot be paid that way. Use UPI, netbanking or wallet.');
     return p;
   }
+  // No wallet or credit payment without the person's approval: a one-time token from
+  // POST /hub/wallet/approve, for at least this amount, used once, within 5 minutes.
+  function requireApproval(h, amount, credit) {
+    const b = (h._req && h._req.body) || {}; const a = h.payApproval;
+    if (!a || !b.approval || a.token !== b.approval || a.expires < Date.now() || Math.abs(a.amount - amount) > 1 || (credit && a.method === 'skip')) throw oops(403, 'Approve this payment first, with your PIN, password, one-time code or fingerprint.', { needs_approval: true });
+  }
+  // Batches (bulk booking, pay all due, ship many orders): the approval is a ceiling; each charge
+  // is counted against it and the token is used up when the batch ends.
+  function approvalBudget(h) {
+    const b = (h._req && h._req.body) || {}; const a = h.payApproval;
+    if (!a || !b.approval || a.token !== b.approval || a.expires < Date.now()) throw oops(403, 'Approve this payment first, with your PIN, password, one-time code or fingerprint.', { needs_approval: true });
+    let spent = 0;
+    return { take(amount) { if (spent + amount > a.amount + 1) throw oops(403, `This is more than the ₹${a.amount.toLocaleString('en-IN')} you approved. Approve again.`, { needs_approval: true }); spent += amount; }, done() { if (spent) delete h.payApproval; } };
+  }
   function settle(db, h, amount, note, paymentId, noCard) {
-    if (!paymentId) { takePayment(db, h, amount, note); return { pay_via: 'wallet' }; }
+    if (!paymentId) { requireApproval(h, amount); takePayment(db, h, amount, note); delete h.payApproval; return { pay_via: 'wallet' }; }
     const p = findPaid(h, amount, paymentId, noCard);
     spendGuard(h, amount);
     p.used = true;
@@ -291,7 +312,18 @@ module.exports = function register(routes, { send }, ctx, engine) {
   }
 
   // ---- transport orders ------------------------------------------------------------
-  const GROUP = { BOOKED: 'new', ASSIGNED: 'assigned', ARRIVING: 'assigned', PICKUP_SCHEDULED: 'assigned', PICKED_UP: 'transit', IN_TRANSIT: 'transit', OUT_FOR_DELIVERY: 'transit', DELIVERED: 'delivered', CANCELLED: 'cancelled', SUCCESS: 'delivered', CONFIRMED: 'new', PAY_LATER: 'new' };
+  const GROUP = { WAITLIST: 'new', BOOKED: 'new', ASSIGNED: 'assigned', ARRIVING: 'assigned', PICKUP_SCHEDULED: 'assigned', PICKED_UP: 'transit', IN_TRANSIT: 'transit', OUT_FOR_DELIVERY: 'transit', DELIVERED: 'delivered', CANCELLED: 'cancelled', SUCCESS: 'delivered', CONFIRMED: 'new', PAY_LATER: 'new' };
+  // Demo clock: a waitlisted ticket is decided 3 minutes after booking. Low waitlist numbers
+  // confirm; the rest are cancelled and the fare goes back to the wallet.
+  function sweepWaitlists(db, h) {
+    for (const r of h.records || []) {
+      if (r.status !== 'WAITLIST' || !r.wl || r.wl.decide_at > Date.now()) continue;
+      if (r.wl.position <= 12) { r.status = 'CONFIRMED'; r.label = `Confirmed from waitlist (was WL ${r.wl.position})`; r.wl.result = 'confirmed'; }
+      else { r.status = 'CANCELLED'; r.label = `Waitlist did not confirm (WL ${r.wl.position}) · refunded`; r.wl.result = 'refunded'; if (r.pay_via === 'wallet' && r.amount) credit(db, r.amount, `Refund · waitlist not confirmed · ${r.title} · ${r.id}`); }
+      r.wl.decided_at = iso(Date.now());
+    }
+  }
+  const late = {}; // filled in by later modules
   function live(r) {
     if (!r.booking_id || r.status === 'CANCELLED') return { ...r, group: GROUP[r.status] || 'new' };
     const t = engine.trackById(r.booking_id);
@@ -338,7 +370,7 @@ module.exports = function register(routes, { send }, ctx, engine) {
   function sectionFilter(section, o) {
     if (section === 'vehicle') return o.mode === 'intercity' || (o.mode === 'local' && ['bike', 'auto', 'mini'].includes(o.vehicle) && !['Contractor', 'Third-party logistics'].includes(o.provider_type));
     if (section === 'courier') return o.kind === 'courier';
-    if (section === 'logistics') return o.mode === 'ftl' || (o.mode === 'local' && !['bike', 'auto'].includes(o.vehicle) && o.provider_type !== 'Delivery app');
+    if (section === 'logistics') return o.mode === 'ftl' || o.mode === 'ptl' || (o.mode === 'local' && !['bike', 'auto'].includes(o.vehicle) && o.provider_type !== 'Delivery app');
     return true;
   }
 
@@ -351,6 +383,31 @@ module.exports = function register(routes, { send }, ctx, engine) {
     return { tone: 'info', text: `${list.length} prices for this trip, from ₹${lo.toLocaleString('en-IN')} to ₹${hi.toLocaleString('en-IN')}. The lowest is ${pct}% below their average.` };
   };
 
+  // Every price, line by line. The lines always add up to the total shown.
+  function fareOf(o, i) {
+    const km = Math.round(i.distanceKm || 0);
+    const pre = o.price / 1.18; const gst = Math.round(o.price - pre);
+    const lines = []; let freight = pre;
+    const cut = (label, v, note) => { v = Math.round(v); if (v <= 0) return; lines.push({ label, amount: v, note }); freight -= v; };
+    if (o.mode === 'ftl') cut('Tolls', 400 * Math.ceil(km / 300) * (pre / Math.max(1, pre)), `${km} km of highway`);
+    if (o.mode === 'intercity') cut('Tolls', 250 * Math.ceil(km / 250), `${km} km of highway`);
+    if (i.helpers && ['local', 'intercity'].includes(o.mode)) cut(`Loading helpers × ${i.helpers}`, i.helpers * (o.mode === 'intercity' ? 400 : o.max_kg > 1000 ? 350 : 200), 'Both ends');
+    if (/night charge/.test(o.note || '')) cut('Night charge (20%)', freight - freight / 1.2, '10 PM to 6 AM');
+    if (o.mode === 'parcel' || o.mode === 'ptl' || o.mode === 'air') { cut('Fuel surcharge', freight * 0.12 / 1.12, '12% of freight, revised monthly'); cut('Docket and handling', Math.min(60, freight * 0.05), 'Per booking'); }
+    const base = ['local', 'intercity', 'ftl'].includes(o.mode) ? Math.round(freight * 0.3) : 0;
+    const head = [];
+    if (base) head.push({ label: 'Base fare', amount: base, note: o.title });
+    head.push({ label: base ? 'Distance charge' : 'Freight', amount: 0, note: km ? `${km} km${o.mode === 'parcel' ? ` · ${i.weight} kg chargeable` : ''}` : `${i.weight} kg` });
+    const out = [...head, ...lines, { label: 'GST (18%)', amount: gst, note: 'Included' }];
+    if (o.insurance) out.push({ label: 'Insurance', amount: o.insurance, note: '0.2% of declared value' });
+    if (o.stop_fee) out.push({ label: 'Extra stops', amount: o.stop_fee, note: '₹40 a stop' });
+    if (o.backhaul) out.push({ label: 'Return-load discount', amount: -o.backhaul.off, note: `${o.backhaul.pct}% off: this truck is heading back empty` });
+    // The freight line takes the remainder, so every line sums to the total exactly.
+    const rest = o.total - out.reduce((t, l) => t + l.amount, 0);
+    out.find((l) => l.label === 'Distance charge' || l.label === 'Freight').amount = rest;
+    return out;
+  }
+  const waitingOf = (o) => (o.mode === 'local' ? 'First 20 min at pickup and at drop are free, then ₹3 a minute.' : ['intercity', 'ftl'].includes(o.mode) ? `Loading and unloading: 2 hours free at each end, then ₹${o.max_kg >= 9000 ? 600 : o.max_kg >= 3500 ? 400 : 250} an hour.` : 'No waiting charges. Three delivery attempts included.');
   routes['POST /v1/hub/transport/quote'] = hub(({ res, body, owner, h }) => {
     const section = ['vehicle', 'courier', 'logistics', 'international'].includes(body.section) ? body.section : null;
     if (!section) throw oops(400, 'Choose a transport section.');
@@ -404,6 +461,17 @@ module.exports = function register(routes, { send }, ctx, engine) {
       return true;
     });
     const holiday = shut.size || (limitedCount && holidayName) ? { date: pickupDay, name: holidayName, closed: [...shut], limited: limitedCount } : null;
+    list.forEach((o) => {
+      if (!['ftl', 'intercity'].includes(o.mode)) return;
+      const lane = hash(`${o.provider}|${input.from}|${input.to}|${localDay(input.pickupAt)}`);
+      if (lane % 3) return;
+      const pct = 20 + (lane % 16);
+      const off = Math.round(o.total * pct / 100);
+      o.backhaul = { pct, off, home: input.from, free_at: iso(input.pickupAt + 3 * 3600000) };
+      o.total -= off; o.price -= off;
+    });
+    const mineBy = new Map();
+    h.records.filter((r) => r.section === section && list.some((o) => o.provider === r.provider)).forEach((r) => { Object.defineProperty(r, '_lv', { value: live(r), configurable: true, enumerable: false, writable: true }); mineBy.set(r.provider, [...(mineBy.get(r.provider) || []), r]); });
     if (list.length) {
       const now = Date.now();
       const avg = list.reduce((a, o) => a + o.total, 0) / list.length;
@@ -415,7 +483,17 @@ module.exports = function register(routes, { send }, ctx, engine) {
         o.save = Math.max(0, Math.round(avg + stopFee - o.total));
         // Pay on delivery: not for truck loads or exports (paid in advance), not on India Post,
         // and only up to ₹5,000 so a partner is never carrying a large cash collection.
-        o.cod = !['logistics', 'international'].includes(section) && o.provider !== 'India Post' && o.total <= 5000;
+        o.cod = false; // pay on delivery is not offered: every booking is paid from the wallet or business credit
+        // Your own history with this partner, from your bookings (not simulated).
+        const yours = mineBy.get(o.provider) || [];
+        if (yours.length) {
+          const lv = yours.map((r) => r._lv); const done = lv.filter((r) => r.group === 'delivered').length;
+          o.mine = { trips: yours.length, delivered: done, cancelled: lv.filter((r) => r.status === 'CANCELLED').length, claims: yours.filter((r) => r.claim).length, spent: yours.reduce((t, r) => t + (r.amount || 0), 0), last: yours[0].at };
+        }
+        o.rto_pct = +(0.8 + (seed % 45) / 10).toFixed(1); // returned to sender on this lane
+        o.late_days = +((seed % 7) / 10 + 0.1).toFixed(1); // average delay when late
+        o.waiting = waitingOf(o);
+        o.fare = fareOf(o, input);
         o.co2 = +((input.distanceKm || 5000) * ({ bike: 0.04, auto: 0.08, mini: 0.18, parcel: 0.1, ptl: 0.3, plane: 1.4, air: 1.4, ship: 0.2 }[o.vehicle] || 0.6)).toFixed(1);
       });
       // Rank by value, arrival and service record together.
@@ -423,6 +501,17 @@ module.exports = function register(routes, { send }, ctx, engine) {
       const score = (o) => (o.total / minP) * 0.5 + ((Date.parse(o.eta) - now) / Math.max(1, minT)) * 0.2 - o.rating * 0.06 - o.on_time * 0.006;
       list.sort((a, b) => score(a) - score(b));
       awardTags(list, (o) => o.total, (o) => Date.parse(o.eta), 'Fastest');
+      list.slice(0, 5).forEach((o) => {
+        const why = [];
+        if (o.save > 0) why.push(`₹${o.save.toLocaleString('en-IN')} below the average of ${list.length} quotes`);
+        if (o.backhaul) why.push(`${o.backhaul.pct}% off as a return load`);
+        if (o.on_time >= 94) why.push(`${o.on_time}% on time on this route`);
+        if (o.tags.includes('Fastest')) why.push('Arrives first');
+        if (o.rating >= 4.5) why.push(`Rated ${o.rating} by customers`);
+        if (o.claims_pct <= 0.5) why.push(`Claims on only ${o.claims_pct}% of trips`);
+        if (section === 'courier' && o.rto_pct <= 2) why.push(`Only ${o.rto_pct}% returned to sender`);
+        o.why = why.slice(0, 3);
+      });
       // Your own auto-allocation rules go first.
       const rule = section === 'courier' && ((h.parity || {}).alloc || []).find((r) => input.weight >= r.min_kg && input.weight <= r.max_kg);
       const at = rule ? list.findIndex((o) => o.provider === rule.courier) : -1;
@@ -433,7 +522,8 @@ module.exports = function register(routes, { send }, ctx, engine) {
     const form = { from: text(body.from_place, 80), to: text(body.to_place, 80), country: body.country, weight: body.weight, pieces: body.pieces, length: body.length, breadth: body.breadth, height: body.height, category: body.category, value: body.value, stops: stopNames, helpers: body.helpers };
     quotes.set(id, { owner, section, input, options: list, form, expires: Date.now() + 20 * 60000 });
     for (const [k, q] of quotes) if (q.expires < Date.now()) quotes.delete(k);
-    send(res, 200, { quote_id: id, valid_minutes: 20, section, route: { service: input.service, from: input.from, to: input.to, city: input.city || null, distance_km: input.distanceKm || null }, load: { weight: input.weight, pieces: input.pieces }, options: list, holiday, estimated: !!(places.labels.from || places.labels.to), insight: insightFor(list),
+    const lane = { shipments: 300 + (hash(`${input.fromPin || input.from}|${input.toPin || input.to}`) % 2400), days: 90 };
+    send(res, 200, { quote_id: id, valid_minutes: 20, expires_at: iso(Date.now() + 20 * 60000), lane, section, route: { service: input.service, from: input.from, to: input.to, city: input.city || null, distance_km: input.distanceKm || null }, load: { weight: input.weight, pieces: input.pieces }, options: list, holiday, estimated: !!(places.labels.from || places.labels.to), insight: insightFor(list),
       message: list.length ? null : holiday && holiday.closed.length ? `Partners for this service are closed for ${holiday.name}. Try another pickup date.` : missed ? `No service can meet your deadline. ${missed} option${missed > 1 ? 's are' : ' is'} available with a later delivery.` : section === 'courier' ? 'No courier fits this load. Try Logistics for full-truck services.' : 'No service fits this load right now. Try another weight or try again in a few minutes.' });
   });
 
@@ -468,15 +558,25 @@ module.exports = function register(routes, { send }, ctx, engine) {
     const deal = priceWith(h, q.section, option.total + fee + extraFee, body);
     const amount = deal.payable;
     if (body.dry_run) return dryRun(res, h, amount);
-    const paid = pay === 'prepaid' && body.payment_id ? findPaid(h, amount, body.payment_id) : null;
-    if (paid || pay !== 'prepaid') spendGuard(h, amount); else ensureFunds(db, h, amount);
+    const useCredit = body.pay_from === 'credit';
+    if (useCredit) { if (!late.credit) throw oops(400, 'Business credit is not available.'); late.credit.creditCheck(h, amount); }
+    const paid = !useCredit && pay === 'prepaid' && body.payment_id ? findPaid(h, amount, body.payment_id) : null;
+    if (paid || useCredit || pay !== 'prepaid') spendGuard(h, amount); else ensureFunds(db, h, amount);
+    if (useCredit || (!paid && pay === 'prepaid')) requireApproval(h, amount, useCredit);
     const { id } = engine.createBooking(q, option, body);
     let via = {};
     if (paid) { paid.used = true; via = { pay_via: paid.method, pay_detail: paid.detail }; }
+    else if (useCredit) { late.credit.chargeCredit(h, amount, `${option.title} · ${option.provider}`, id); via = { pay_via: 'credit' }; }
     else if (pay === 'prepaid') { debit(db, amount, `${option.title} · ${option.provider} · ${id}`); via = { pay_via: 'wallet' }; }
+    delete h.payApproval; // used once
     settleDeal(h, deal, option.title);
     const i = q.input;
     const rec = addRecord(h, { id, booking_id: id, places, section: q.section, title: option.title, provider: option.provider, provider_type: option.provider_type, sub: `${i.from} → ${i.to}`, amount, gross: option.total + fee + extraFee, fee, extras, discount: deal.discount, coupon: deal.coupon, points_used: deal.points, insurance: option.insurance || 0, declared: option.insurance ? i.declared : 0, pay_mode: pay, ...via, status: 'BOOKED', label: 'Booking confirmed', weight: i.weight, reference: text(body.reference, 40), segment: i.segment, form: q.form, pickup_address: text(body.pickup_address, 200), drop_address: text(body.drop_address, 200), contact_name: text(c.name, 60), contact_phone: c.phone, receiver: rc.phone ? { name: text(rc.name, 60) || 'there', phone: rc.phone, consent: !!rc.consent } : null, scheduled_for: i.pickupAt > Date.now() + 3600000 ? iso(i.pickupAt) : null });
+    // Trucks and vans between cities: consignment note now; e-way bill, proof of delivery and detention later.
+    if (['ftl', 'intercity', 'ptl'].includes(option.mode) || (q.section === 'logistics' && option.mode === 'local')) {
+      const seed = parseInt(crypto.createHash('md5').update(id).digest('hex').slice(0, 8), 16);
+      rec.freight = { lr: `LR${String(seed % 1e8).padStart(8, '0')}`, km: Math.round(i.distanceKm || 0), vehicle: option.title, vehicle_no: `${['KA', 'MH', 'TS', 'TN', 'DL'][seed % 5]} ${String(1 + (seed % 50)).padStart(2, '0')} ${String.fromCharCode(65 + (seed % 26))}${String.fromCharCode(65 + ((seed >> 5) % 26))} ${1000 + (seed % 9000)}`, free_hours: 2, rate_per_hour: option.max_kg >= 9000 ? 600 : option.max_kg >= 3500 ? 400 : 250, ewb: null, pod: null };
+    }
     q.options = q.options.filter((o) => o.id !== option.id);
     send(res, 200, { id: rec.id, amount, pay_mode: pay, pay_via: via.pay_via, wallet_balance: db.balance, tracking_url: `/track/?id=${id}` });
   });
@@ -801,6 +901,8 @@ module.exports = function register(routes, { send }, ctx, engine) {
     if (!(amount >= 100)) throw oops(400, 'Withdraw at least ₹100.');
     if (amount > db.balance) throw oops(400, 'That is more than your wallet balance.');
     if (!h.profile.upi && !h.profile.bank.account) throw oops(400, 'Add a UPI ID or bank account in your profile first.');
+    requireApproval(h, amount);
+    delete h.payApproval;
     debit(db, amount, `Withdrawal to ${h.profile.upi || 'bank account'} (demo)`);
     send(res, 200, { balance: db.balance });
   });
@@ -821,13 +923,15 @@ module.exports = function register(routes, { send }, ctx, engine) {
       const biz = b.cabin === 'business';
       const km = engine.haversine([a[2], a[3]], [z[2], z[3]]);
       const intl = !!(a[4] || z[4]);
+      if (!intl && ((a[5] && !a[5].includes(z[0])) || (z[5] && !z[5].includes(a[0])))) throw noDirect(`No direct flights between ${a[1]} and ${z[1]}.`);
       return (intl ? INTL_AIRLINES : AIRLINES).flatMap(([provider, mult, rating], n) => [0, 1].map((k) => {
         const seed = hash(`${b.from}${b.to}${b.date}${provider}${k}`);
         const stops = intl && km > 5000 && seed % 3 === 0 ? 1 : !intl && seed % 7 === 0 ? 1 : 0;
         const mins = Math.round(km / 760 * 60 + 40 + stops * 110);
         const dep = 300 + (seed % 960);
         const price = Math.round((1900 + km * (intl ? 5.2 : 4.4)) * mult * (biz ? 2.7 : 1) * (0.92 + (seed % 25) / 100)) * pax;
-        return { kind: 'flight', provider, title: `${a[0]} → ${z[0]}`, sub: `${provider.slice(0, 2).toUpperCase()} ${100 + (seed % 899)} · ${biz ? 'Business' : 'Economy'}`, meta: [`${clock(dep)} – ${clock(dep + mins)}`, span(mins), stops ? '1 stop' : 'Non-stop', `${pax} traveller${pax > 1 ? 's' : ''}`], price, mins, rating, section: 'travel', premium: biz, record_title: `Flight ${a[0]} → ${z[0]}`, record_sub: `${b.date} · ${pax} traveller${pax > 1 ? 's' : ''}`, pay_later: false };
+        const status = seed % 11 === 0 ? 'sold_out' : 'ok';
+        return { kind: 'flight', provider, title: `${a[0]} → ${z[0]}`, sub: `${provider.slice(0, 2).toUpperCase()} ${100 + (seed % 899)} · ${biz ? 'Business' : 'Economy'}`, meta: [`${clock(dep)} – ${clock(dep + mins)}`, span(mins), stops ? '1 stop' : 'Non-stop', status === 'sold_out' ? 'Sold out' : `${pax} traveller${pax > 1 ? 's' : ''}`], dep, status, price, mins, rating, section: 'travel', premium: biz, record_title: `Flight ${a[0]} → ${z[0]}`, record_sub: `${b.date} · ${pax} traveller${pax > 1 ? 's' : ''}`, pay_later: false };
       })).filter((o, n) => n % 2 === 0 || hash(o.sub) % 2);
     },
     bus(b) {
@@ -837,13 +941,14 @@ module.exports = function register(routes, { send }, ctx, engine) {
       checkDate(b.date, 'travel date');
       const seats = Math.max(1, Math.min(6, Math.floor(Number(b.seats) || 1)));
       const km = engine.haversine([a[1], a[2]], [z[1], z[2]]) * 1.28;
-      if (km > 1700) throw oops(400, 'No overnight buses on this long a route. Try a flight.');
+      if (km > 1700) throw noDirect('No direct buses on this long a route.');
       return BUS_OPERATORS.map(([provider, mult, rating, type]) => {
         const seed = hash(`${b.from}${b.to}${b.date}${provider}`);
         const mins = Math.round(km / (46 + (seed % 10)) * 60);
         const dep = 1080 + (seed % 330);
         const price = Math.round((180 + km * 1.75) * mult) * seats;
-        return { kind: 'bus', provider, title: `${a[0]} → ${z[0]}`, sub: type, meta: [`${clock(dep)} – ${clock(dep + mins)}`, span(mins), `${8 + (seed % 26)} seats left`, `${seats} seat${seats > 1 ? 's' : ''}`], price, mins, rating, section: 'travel', record_title: `Bus ${a[0]} → ${z[0]}`, record_sub: `${b.date} · ${seats} seat${seats > 1 ? 's' : ''}`, pay_later: false };
+        const status = seed % 7 === 0 ? 'sold_out' : 'ok';
+        return { kind: 'bus', provider, title: `${a[0]} → ${z[0]}`, sub: type, meta: [`${clock(dep)} – ${clock(dep + mins)}`, span(mins), status === 'sold_out' ? 'Sold out' : `${8 + (seed % 26)} seats left`, `${seats} seat${seats > 1 ? 's' : ''}`], dep, status, price, mins, rating, section: 'travel', record_title: `Bus ${a[0]} → ${z[0]}`, record_sub: `${b.date} · ${seats} seat${seats > 1 ? 's' : ''}`, pay_later: false };
       });
     },
     train(b) {
@@ -857,8 +962,9 @@ module.exports = function register(routes, { send }, ctx, engine) {
         const seed = hash(`${b.from}${b.to}${b.date}${name}`);
         const mins = Math.round((km / speed) * 60);
         const dep = 300 + (seed % 960);
-        const left = seed % 5 === 0 ? `Waitlist ${1 + (seed % 30)}` : `${6 + (seed % 90)} seats left`;
-        return { kind: 'train', provider: name, title: `${a[0]} → ${z[0]}`, sub: `${10000 + (seed % 9000)} · ${cls}`, meta: [`${clock(dep)} – ${clock(dep + mins)}`, span(mins), left, `${pax} passenger${pax > 1 ? 's' : ''}`], price: Math.round((60 + km * rate) * pax), mins, rating, section: 'travel', record_title: `Train ${a[0]} → ${z[0]}`, record_sub: `${b.date} · ${pax} passenger${pax > 1 ? 's' : ''}`, pay_later: false };
+        const full = BUSY_TRAINS.has(`${a[0]}|${z[0]}`) || seed % 5 === 0;
+        const left = full ? `Waitlist ${1 + (seed % 30)}` : `${6 + (seed % 90)} seats left`;
+        return { kind: 'train', provider: name, title: `${a[0]} → ${z[0]}`, sub: `${10000 + (seed % 9000)} · ${cls}`, meta: [`${clock(dep)} – ${clock(dep + mins)}`, span(mins), left, `${pax} passenger${pax > 1 ? 's' : ''}`], dep, status: full ? 'waitlist' : 'ok', price: Math.round((60 + km * rate) * pax), mins, rating, section: 'travel', record_title: `Train ${a[0]} → ${z[0]}`, record_sub: `${b.date} · ${pax} passenger${pax > 1 ? 's' : ''}`, pay_later: false };
       });
     },
     movers(b) {
@@ -913,18 +1019,109 @@ module.exports = function register(routes, { send }, ctx, engine) {
     });
   }
 
+  // ---- connecting journeys --------------------------------------------------------------
+  // When there is no direct trip, or every direct seat is waitlisted or sold out, look for
+  // two confirmed legs through a city on the way: the same mode first, then a mix
+  // (train + bus, or a short train ride to an airport).
+  const MODE = { train: 'Train', bus: 'Bus', flight: 'Flight' };
+  const addDays = (date, n) => new Date(Date.parse(date + 'T00:00:00Z') + n * 864e5).toISOString().slice(0, 10);
+  const airportOf = (city) => (AIRPORTS.find((x) => x[1] === city && !x[4]) || [])[0];
+  const cityOfAirport = (code) => (AIRPORTS.find((x) => x[0] === code) || [])[1];
+  function cityPoints() {
+    const m = new Map();
+    BUS_CITIES.forEach(([c, lat, lng]) => m.set(c, [lat, lng]));
+    AIRPORTS.filter((x) => !x[4]).forEach(([, c, lat, lng]) => { if (!m.has(c)) m.set(c, [lat, lng]); });
+    return m;
+  }
+  function legOptions(mode, from, to, date, n, cabin, cache) {
+    const key = `${mode}|${from}|${to}|${date}`;
+    if (cache.has(key)) return cache.get(key);
+    let list = [];
+    try {
+      const b = mode === 'flight' ? { from: airportOf(from), to: airportOf(to), date, pax: n, cabin } : { from, to, date, pax: n, seats: n };
+      if (mode !== 'flight' || (b.from && b.to)) list = searchers[mode](b).filter((o) => o.status === 'ok');
+    } catch (e) { list = []; }
+    cache.set(key, list);
+    return list;
+  }
+  function connections(kind, b, poor) {
+    const pts = cityPoints();
+    const from = kind === 'flight' ? cityOfAirport(b.from) : b.from;
+    const to = kind === 'flight' ? cityOfAirport(b.to) : b.to;
+    if (!pts.has(from) || !pts.has(to)) return [];
+    const n = Math.max(1, Math.min(9, Math.floor(Number(kind === 'bus' ? b.seats : b.pax) || 1)));
+    const d = (x, y) => engine.haversine(pts.get(x), pts.get(y));
+    const whole = d(from, to);
+    const pairs = { train: [['train', 'train'], ['train', 'bus'], ['bus', 'train']], bus: [['bus', 'bus'], ['bus', 'train'], ['train', 'bus']], flight: [['flight', 'flight'], ['train', 'flight'], ['flight', 'train']] }[kind];
+    // With direct seats free, only near-straight connections are worth showing.
+    const detour = kind === 'flight' ? (poor ? 1.9 : 1.4) : poor ? 1.5 : 1.2;
+    const via = (h) => d(from, h) + d(h, to);
+    const ok = (h, lim) => h !== from && h !== to && d(from, h) > 60 && d(h, to) > 60 && via(h) / whole <= lim;
+    const hubs = [...pts.keys()].filter((h) => ok(h, detour)).sort((x, y) => via(x) - via(y)).slice(0, 6);
+    // Flights change at a hub airport, even when it is out of the way.
+    if (kind === 'flight') AIRPORTS.filter((x) => !x[4] && !x[5] && ok(x[1], 3.2) && !hubs.includes(x[1])).forEach((x) => hubs.push(x[1]));
+    const cache = new Map(); const found = [];
+    for (const hub of hubs) for (const [m1, m2] of pairs) {
+      // A train leg next to a flight is only worth it for a short hop to or from the airport.
+      if (m1 !== m2 && kind === 'flight' && d(m1 === 'flight' ? hub : from, m1 === 'flight' ? to : hub) > 450) continue;
+      const first = legOptions(m1, from, hub, b.date, n, b.cabin, cache);
+      let best = null;
+      for (const a of [...first].sort((x, y) => x.price - y.price).slice(0, 4)) {
+        const arr = a.dep + a.mins;
+        const minWait = m1 === m2 ? 60 : 120;
+        for (let day = Math.floor(arr / 1440); day <= Math.floor(arr / 1440) + 1; day++) {
+          for (const z of legOptions(m2, hub, to, addDays(b.date, day), n, b.cabin, cache)) {
+            const wait = day * 1440 + z.dep - arr;
+            if (wait < minWait || wait > 720) continue;
+            const total = a.mins + wait + z.mins;
+            const score = a.price + z.price + total * 4;
+            if (!best || score < best.score) best = { a, z, wait, total, day, score };
+          }
+        }
+      }
+      if (best) found.push({ hub, m1, m2, ...best });
+    }
+    const same = (c) => (c.m1 === kind && c.m2 === kind ? 0 : 1);
+    return found.sort((x, y) => same(x) - same(y) || x.score - y.score).slice(0, 6).map((c) => {
+      const leg = (o, mode, date) => ({ kind: mode, provider: o.provider, title: o.title, sub: o.sub, date, dep: clock(o.dep), arr: clock((o.dep + o.mins) % 1440), next_day: o.dep + o.mins >= 1440, mins: o.mins, price: o.price });
+      const modes = c.m1 === c.m2 ? MODE[c.m1] : `${MODE[c.m1]} + ${MODE[c.m2]}`;
+      const end = c.a.dep + c.total;
+      return {
+        kind, connecting: true, provider: c.a.provider === c.z.provider ? c.a.provider : `${c.a.provider} + ${c.z.provider}`,
+        title: `${from} → ${c.hub} → ${to}`, sub: `${modes} · change at ${c.hub}`, modes, change_at: c.hub,
+        meta: [`${clock(c.a.dep)} – ${clock(end % 1440)}${end >= 1440 ? ` (+${Math.floor(end / 1440)} day)` : ''}`, span(c.total), `${span(c.wait)} at ${c.hub}`, 'Confirmed seats'],
+        dep: c.a.dep, arr: end % 1440, price: c.a.price + c.z.price, mins: c.total, rating: Math.min(c.a.rating, c.z.rating), section: 'travel', layover: c.wait,
+        legs: [leg(c.a, c.m1, b.date), leg(c.z, c.m2, addDays(b.date, c.day))],
+        record_title: `${MODE[kind]} ${from} → ${to} via ${c.hub}`, record_sub: `${b.date} · ${n} ${kind === 'bus' ? 'seat' : 'traveller'}${n > 1 ? 's' : ''} · ${modes}`, pay_later: false,
+      };
+    });
+  }
+
   routes['POST /v1/hub/search'] = hub(({ res, body, owner }) => {
     const run = searchers[body.kind];
     if (!run) throw oops(400, 'Choose what to search for.');
-    const list = run(body).map((o) => ({ ...o, id: crypto.randomBytes(5).toString('hex') }));
+    let raw; let reason = '';
+    try { raw = run(body); } catch (e) { if (!e.noDirect) throw e; raw = []; reason = e.message; }
+    const list = raw.map((o) => ({ ...o, id: crypto.randomBytes(5).toString('hex') }));
     if (list.length) {
       const score = (o) => o.price / Math.min(...list.map((x) => x.price)) * 0.6 + o.mins / Math.min(...list.map((x) => x.mins)) * 0.25 - o.rating * 0.08;
       list.sort((a, b) => score(a) - score(b));
       awardTags(list, (o) => o.price, (o) => o.mins, ['hotel', 'stay'].includes(list[0].kind) ? 'Closest' : 'Fastest');
       list.forEach((o) => offers.set(o.id, { owner, offer: o, expires: Date.now() + 20 * 60000 }));
     }
+    // Direct trips are "poor" when none run or none has a confirmed seat.
+    let state = 'ok'; let connecting = [];
+    if (MODE[body.kind]) {
+      const free = list.filter((o) => o.status === 'ok');
+      state = !list.length ? 'none' : free.length ? 'ok' : list.some((o) => o.status === 'waitlist') ? 'waitlist' : 'sold_out';
+      const intl = body.kind === 'flight' && AIRPORTS.some((x) => (x[0] === body.from || x[0] === body.to) && x[4]);
+      if (state !== 'ok') list.forEach((o) => { o.tags = (o.tags || []).filter((t) => t !== 'Recommended'); });
+      if (!intl) connecting = connections(body.kind, body, state !== 'ok').map((o, i) => ({ ...o, id: crypto.randomBytes(5).toString('hex'), tags: i === 0 && state !== 'ok' ? ['Recommended'] : [] }));
+      connecting.forEach((o) => offers.set(o.id, { owner, offer: o, expires: Date.now() + 20 * 60000 }));
+    }
+    if (!list.length && !connecting.length && reason) throw oops(400, `${reason} We could not find a connecting journey either. Try another date.`);
     for (const [k, q] of offers) if (q.expires < Date.now()) offers.delete(k);
-    send(res, 200, { options: list });
+    send(res, 200, { options: list, connections: connecting, direct_state: state, note: reason });
   });
 
   routes['POST /v1/hub/search/book'] = hub(({ res, body, db, h, owner }) => {
@@ -948,8 +1145,8 @@ module.exports = function register(routes, { send }, ctx, engine) {
     settleDeal(h, deal, o.record_title);
     offers.delete(body.offer_id);
     if (lock) h.locks = h.locks.filter((l) => l !== lock);
-    const rec = addRecord(h, { section: o.section, kind: o.kind, title: o.record_title, provider: o.provider, sub: o.record_sub, amount: deal.payable, gross: base, flex: !!flexFee, seats, addons, pnr: trip ? crypto.randomBytes(3).toString('hex').toUpperCase() : null, premium: o.premium, per_night: o.per_night, discount: deal.discount, coupon: deal.coupon, points_used: deal.points, pay_mode: later ? 'cod' : 'prepaid', ...via, status: later ? 'PAY_LATER' : 'CONFIRMED', label: later ? o.pay_later_label : 'Confirmed', traveller: text(body.name, 60) });
-    send(res, 200, { id: rec.id, amount: deal.payable, wallet_balance: db.balance, pay_mode: rec.pay_mode });
+    const rec = addRecord(h, { section: o.section, kind: o.kind, title: o.record_title, provider: o.provider, sub: o.record_sub, amount: deal.payable, gross: base, flex: !!flexFee, seats, addons, pnr: trip ? crypto.randomBytes(3).toString('hex').toUpperCase() : null, legs: o.legs ? o.legs.map((l) => ({ ...l, pnr: crypto.randomBytes(3).toString('hex').toUpperCase() })) : undefined, change_at: o.change_at, waitlist: o.status === 'waitlist' || undefined, premium: o.premium, per_night: o.per_night, discount: deal.discount, coupon: deal.coupon, points_used: deal.points, pay_mode: later ? 'cod' : 'prepaid', ...via, status: o.status === 'waitlist' ? 'WAITLIST' : later ? 'PAY_LATER' : 'CONFIRMED', label: o.status === 'waitlist' ? `Waitlisted · WL ${(/Waitlist (\d+)/.exec(o.meta.join(' ')) || [, '?'])[1]}` : later ? o.pay_later_label : 'Confirmed', wl: o.status === 'waitlist' ? { position: Number((/Waitlist (\d+)/.exec(o.meta.join(' ')) || [, 30])[1]), decide_at: Date.now() + 3 * 60000 } : undefined, traveller: text(body.name, 60) });
+    send(res, 200, { id: rec.id, amount: deal.payable, wallet_balance: db.balance, pay_mode: rec.pay_mode, pnr: rec.legs ? rec.legs.map((l) => l.pnr).join(' · ') : rec.pnr || undefined });
   });
 
   // ---- catalogue, recharges, bills, business payments ---------------------------------
@@ -1484,5 +1681,5 @@ module.exports = function register(routes, { send }, ctx, engine) {
     send(res, 200, { ...p, workspace: workspaceOf(h), score: profileScore(p, db), score_total: 7, apps: APPS.map(([key, name, group]) => ({ key, name, group, connected: !!p.connected[key] })) });
   });
 
-  return { hub, hubOf, live, oops, text, takePayment, addRecord, offers, upcomingOf };
+  return { hub, hubOf, live, oops, text, takePayment, addRecord, offers, upcomingOf, late, requireApproval, approvalBudget };
 };

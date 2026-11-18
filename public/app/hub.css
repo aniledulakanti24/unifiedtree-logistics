@@ -420,7 +420,7 @@ table.cmp td.best { background: var(--primary-50); font-weight: 600; }
 /* Tracking */
 .drawer--wide { width: min(460px, 100%); }
 .trk-map { border-radius: 12px; background: var(--bg-2); overflow: hidden; margin-bottom: 14px; }
-.trk-map svg { display: block; width: 100%; height: auto; fill: none; stroke: none; }
+.trk-map > svg { display: block; width: 100%; height: auto; fill: none; stroke: none; }
 .trk-blocks rect { fill: var(--line); opacity: .7; }
 .trk-base { fill: none; stroke: var(--line-strong); stroke-width: 4; stroke-linecap: round; }
 .trk-done { fill: none; stroke: var(--primary); stroke-width: 4; stroke-linecap: round; }

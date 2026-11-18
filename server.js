@@ -252,6 +252,7 @@ require('./server/website-api')(routes, { send }, sellerCtx, bookingCtx, hubCtx)
 require('./server/home-api')(routes, { send }, sellerCtx, hubCtx);
 require('./server/wallet-api')(routes, { send }, sellerCtx, hubCtx);
 require('./server/insights-api')(routes, { send }, sellerCtx, hubCtx);
+hubCtx.late.credit = require('./server/freight-api')(routes, { send }, sellerCtx, hubCtx);
 const bizCtx = require('./server/business-api')(routes, { send }, sellerCtx, bookingCtx, hubCtx);
 require('./server/orders-api')(routes, { send, users }, sellerCtx, bookingCtx, hubCtx, bizCtx);
 require('./server/parity-api')(routes, { send, users }, sellerCtx, bookingCtx, hubCtx, bizCtx);

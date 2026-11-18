@@ -1,19 +1,19 @@
 // Pin-first places, the way city delivery apps work: search or use your location, confirm the
 // pin on a map, then add the details a driver needs (flat, floor, lift, landmark, who to call).
 // A place: { label, area, city, pincode, lat, lng, house, street, floor, lift, landmark, contact, address, saved }
-import { api, esc, modal, store, toast } from '../core.js';
+import { api, esc, modal, store, toast, scoped } from '../core.js';
 import { icon } from './icons.js';
 import { createMap, describe } from './maps.js';
 
 const RECENT = 'ut-recent-places';
 let meta = null;
 const getMeta = async () => (meta || (meta = await api('/public/booking/meta')));
-const readRecent = () => { try { return JSON.parse(localStorage.getItem(RECENT)) || []; } catch (e) { return []; } };
+const readRecent = () => { try { return JSON.parse(localStorage.getItem(scoped(RECENT))) || []; } catch (e) { return []; } };
 export function remember(p) {
   if (!p || !p.lat) return;
   const key = (x) => `${x.house}|${x.lat.toFixed(4)}|${x.lng.toFixed(4)}`;
   const list = [p, ...readRecent().filter((x) => x.lat && key(x) !== key(p))].slice(0, 6);
-  try { localStorage.setItem(RECENT, JSON.stringify(list)); } catch (e) { /* private mode */ }
+  try { localStorage.setItem(scoped(RECENT), JSON.stringify(list)); } catch (e) { /* private mode */ }
 }
 const FLOORS = [['', 'Floor (optional)'], ['basement', 'Basement'], ['0', 'Ground floor'], ...Array.from({ length: 20 }, (_, i) => [String(i + 1), `${i + 1}${['st', 'nd', 'rd'][i] || 'th'} floor`]), ['21', 'Above 20th floor']];
 export const floorText = (f) => (f === '' || f == null ? '' : (FLOORS.find(([k]) => k === String(f)) || [, ''])[1]);

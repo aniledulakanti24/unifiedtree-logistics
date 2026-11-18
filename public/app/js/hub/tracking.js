@@ -5,6 +5,21 @@ import { refresh } from './ui.js';
 import { createMap } from './maps.js';
 
 const PATH = 'M28 122 C80 34 132 142 196 86 S296 26 334 44';
+// A road-like route between two points: gentle bends that stay the same for each booking.
+const seeded = (s) => { let x = [...String(s)].reduce((a, c) => (a * 31 + c.charCodeAt(0)) >>> 0, 7); return () => { x = (x * 1103515245 + 12345) >>> 0; return x / 4294967296; }; };
+function roadOf(a, b, id) {
+  const r = seeded(id); const n = 28; const dx = b[0] - a[0]; const dy = b[1] - a[1];
+  const k1 = (r() - 0.5) * 0.35; const k2 = (r() - 0.5) * 0.18;
+  return Array.from({ length: n + 1 }, (_, i) => { const t = i / n; const bend = Math.sin(Math.PI * t) * k1 + Math.sin(3 * Math.PI * t) * k2; const wob = i && i < n ? (r() - 0.5) * 0.012 : 0; return [a[0] + dx * t - dy * (bend + wob), a[1] + dy * t + dx * (bend + wob)]; });
+}
+const kmBetween = (p, q) => { const R = 6371; const rd = (x) => (x * Math.PI) / 180; const h = Math.sin(rd(q[0] - p[0]) / 2) ** 2 + Math.cos(rd(p[0])) * Math.cos(rd(q[0])) * Math.sin(rd(q[1] - p[1]) / 2) ** 2; return 2 * R * Math.asin(Math.sqrt(h)); };
+// The point a fraction p of the way along a route, and the route walked so far.
+function along(pts, p) {
+  const seg = pts.slice(1).map((q, i) => kmBetween(pts[i], q)); const total = seg.reduce((a, b) => a + b, 0);
+  let left = total * Math.max(0, Math.min(1, p)); const walked = [pts[0]];
+  for (let i = 0; i < seg.length; i++) { if (left <= seg[i]) { const f = seg[i] ? left / seg[i] : 0; const at = [pts[i][0] + (pts[i + 1][0] - pts[i][0]) * f, pts[i][1] + (pts[i + 1][1] - pts[i][1]) * f]; walked.push(at); return { at, walked, total }; } left -= seg[i]; walked.push(pts[i + 1]); }
+  return { at: pts[pts.length - 1], walked, total };
+}
 
 export function openTracking(id) {
   if (document.querySelector('.drawer-wrap')) return;
@@ -24,16 +39,20 @@ export function openTracking(id) {
   const done = wrap.querySelector('#tDone'); const dot = wrap.querySelector('#tDot'); const body = wrap.querySelector('#tBody');
   const len = done.getTotalLength();
   let shown = 0; let goal = 0; let raf = 0; let timer = 0; let open = true;
-  let map = null; let mover = null;
+  let map = null; let mover = null; let road = null; let doneLine = null; let cur = 0; let tween = 0; let lastP = null;
   // Business accounts get the real route on a map.
   async function showMap(t) {
     const host = wrap.querySelector('.trk-map');
     host.innerHTML = '<div class="map-host trk-real"></div>';
     map = await createMap(host.firstChild);
-    map.line(t.from_pt, t.to_pt); map.marker(t.from_pt, 'pickup'); map.marker(t.to_pt, 'drop');
-    map.fit([t.from_pt, t.to_pt]);
+    road = roadOf(t.from_pt, t.to_pt, id);
+    map.path(road, false); doneLine = map.path([road[0]], true);
+    map.marker(t.from_pt, 'pickup'); map.marker(t.to_pt, 'drop');
+    map.fit(road);
     mover = map.marker(t.from_pt, 'moving');
-    setTimeout(() => map && map.resize(), 80);
+    host.insertAdjacentHTML('beforeend', '<div class="trk-hud"><span><b id="hudKm">—</b><small id="hudSpd">Live</small></span><button type="button" class="trk-fit" id="hudFit">Recentre</button></div>');
+    host.querySelector('#hudFit').addEventListener('click', () => map && map.fit(road));
+    setTimeout(() => { if (!map) return; map.resize(); if (road) map.fit(road); }, 120);
   }
   const place = (p) => { const pt = done.getPointAtLength(len * p); dot.setAttribute('transform', `translate(${pt.x} ${pt.y})`); done.setAttribute('stroke-dashoffset', String(1 - p)); };
   const glide = () => { shown += (goal - shown) * 0.08; if (Math.abs(goal - shown) < 0.001) { shown = goal; place(shown); raf = 0; return; } place(shown); raf = requestAnimationFrame(glide); };
@@ -45,8 +64,18 @@ export function openTracking(id) {
       const t = r.tracking;
       if (!t) { body.innerHTML = '<p class="muted">Tracking has ended for this booking.</p>'; return; }
       goal = t.progress;
-      if (!map && store.state.accountType === 'business' && t.from_pt && t.to_pt) { cancelAnimationFrame(raf); raf = 0; try { await showMap(t); } catch (e) { map = null; } if (!open) return; }
-      if (mover) mover.move([t.from_pt[0] + (t.to_pt[0] - t.from_pt[0]) * goal, t.from_pt[1] + (t.to_pt[1] - t.from_pt[1]) * goal]);
+      if (!map && t.from_pt && t.to_pt) { cancelAnimationFrame(raf); raf = 0; try { await showMap(t); } catch (e) { map = null; } if (!open) return; }
+      if (mover && road) {
+        const from = cur; const to = goal; const t0 = performance.now(); cancelAnimationFrame(tween);
+        const step = (now) => { const k = Math.min(1, (now - t0) / 1600); const e = 1 - (1 - k) ** 3; cur = from + (to - from) * e; const w = along(road, cur); mover.move(w.at); doneLine.set(w.walked); if (k < 1 && open) tween = requestAnimationFrame(step); };
+        tween = requestAnimationFrame(step);
+        const total = along(road, 1).total; const leftKm = total * (1 - goal);
+        const kmh = lastP && goal > lastP.p ? Math.round(((goal - lastP.p) * total) / ((Date.now() - lastP.at) / 3600000)) : null;
+        lastP = { p: goal, at: Date.now() };
+        const hk = wrap.querySelector('#hudKm'); const hs = wrap.querySelector('#hudSpd');
+        if (hk) hk.textContent = t.status === 'DELIVERED' ? 'Delivered' : `${leftKm < 10 ? leftKm.toFixed(1) : Math.round(leftKm)} km left`;
+        if (hs) hs.textContent = t.status === 'DELIVERED' ? 'Trip complete' : kmh ? `Moving · ~${Math.min(kmh, 90)} km/h` : goal > 0 ? 'On the way' : 'Waiting at pickup';
+      }
       else if (!raf) raf = requestAnimationFrame(glide);
       const mins = t.remaining_min;
       const eta = t.status === 'DELIVERED' ? 'Delivered' : mins < 90 ? `${mins} min away` : `By ${date(t.promised_by)}`;
@@ -69,7 +98,7 @@ export function openTracking(id) {
     } catch (e) { if (open) body.innerHTML = `<p class="form-error">${esc(e.message)}</p>`; }
   }
   const prev = document.activeElement;
-  const close = () => { open = false; clearTimeout(timer); cancelAnimationFrame(raf); if (map) map.destroy(); wrap.remove(); document.removeEventListener('keydown', key); if (prev && prev.focus) prev.focus(); };
+  const close = () => { open = false; clearTimeout(timer); cancelAnimationFrame(raf); cancelAnimationFrame(tween); if (map) map.destroy(); wrap.remove(); document.removeEventListener('keydown', key); if (prev && prev.focus) prev.focus(); };
   const key = (e) => { if (e.key === 'Escape') close(); };
   wrap.addEventListener('click', (e) => { if (e.target === wrap || e.target.closest('[data-x]')) close(); });
   document.addEventListener('keydown', key);
@@ -103,7 +132,7 @@ export function reschedule(r, done) {
 export function printTicket(r) {
   const w = window.open('', '_blank');
   if (!w) { toast('Allow pop-ups to open the ticket.', true); return; }
-  w.document.write(`<!doctype html><meta charset="utf-8"><title>E-ticket ${esc(r.pnr)}</title><style>body{font:14px/1.5 Inter,Segoe UI,sans-serif;color:#15211E;max-width:560px;margin:32px auto;padding:20px;border:1px solid #CDD5D2;border-radius:12px}h1{font-size:20px;margin:0}.p{font:700 26px monospace;letter-spacing:.14em;margin:12px 0}small{color:#66736F}.demo{padding:8px 10px;background:#FDF1DC;border-radius:6px}</style><h1>${esc(r.title)}</h1><small>${esc(r.provider)} · ${esc(r.sub || '')}</small><p class="demo">Demo ticket. Not valid for travel.</p><small>PNR</small><div class="p">${esc(r.pnr)}</div><p><b>Passenger:</b> ${esc(r.traveller || '')}<br><b>Seats:</b> ${esc((r.seats || []).join(', ') || 'Assigned at check-in')}<br><b>Add-ons:</b> ${esc((r.addons || []).join(', ') || 'None')}<br><b>Flexible protection:</b> ${r.flex ? 'Yes' : 'No'}</p><script>print()<\/script>`);
+  w.document.write(`<!doctype html><meta charset="utf-8"><title>E-ticket ${esc(r.pnr)}</title><style>body{font:14px/1.5 Inter,Segoe UI,sans-serif;color:#15211E;max-width:560px;margin:32px auto;padding:20px;border:1px solid #CDD5D2;border-radius:12px}h1{font-size:20px;margin:0}.p{font:700 26px monospace;letter-spacing:.14em;margin:12px 0}small{color:#66736F}.demo{padding:8px 10px;background:#FDF1DC;border-radius:6px}</style><h1>${esc(r.title)}</h1><small>${esc(r.provider)} · ${esc(r.sub || '')}</small><p class="demo">Demo ticket. Not valid for travel.</p>${r.legs && r.legs.length ? r.legs.map((l) => `<p><b>${esc(l.title)}</b><br><small>${esc(l.provider)} · ${esc(l.sub)} · ${esc(l.date)} · ${esc(l.dep)} → ${esc(l.arr)}</small></p><small>PNR</small><div class="p">${esc(l.pnr)}</div>`).join('') : `<small>PNR</small><div class="p">${esc(r.pnr)}</div>`}<p><b>Passenger:</b> ${esc(r.traveller || '')}<br><b>Seats:</b> ${esc((r.seats || []).join(', ') || 'Assigned at check-in')}<br><b>Add-ons:</b> ${esc((r.addons || []).join(', ') || 'None')}<br><b>Flexible protection:</b> ${r.flex ? 'Yes' : 'No'}</p><script>print()<\/script>`);
   w.document.close();
 }
 

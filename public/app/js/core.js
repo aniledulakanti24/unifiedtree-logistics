@@ -4,8 +4,14 @@
 const TOKEN_KEY = 'ut_token';
 export const getToken = () => { try { return localStorage.getItem(TOKEN_KEY); } catch (e) { return null; } };
 
+// Things kept in this browser are kept per account, so another sign-in never sees them.
+// Older copies were shared by every account on this browser; remove them once.
+try { ['ut-recent-trips', 'ut-recent-places', 'ut-my-categories'].forEach((k) => localStorage.removeItem(k)); } catch (e) { /* private mode */ }
+export const scoped = (key) => { const u = store.state && store.state.user; return `${key}:${(u && (u.key || u.id || u.mobile)) || 'anon'}`; };
 export function logout() {
-  try { localStorage.removeItem(TOKEN_KEY); localStorage.removeItem('ut-USER'); localStorage.removeItem('ut-account'); sessionStorage.clear(); } catch (e) {}
+  try { localStorage.removeItem(TOKEN_KEY); localStorage.removeItem('ut-USER'); localStorage.removeItem('ut-account'); localStorage.removeItem('ut-order-status'); sessionStorage.clear(); } catch (e) {}
+  try { if (window.caches) caches.delete('ut-api'); } catch (e) {}
+  try { Object.keys(localStorage).filter((k) => /^ut-(recent-trips|recent-places|my-categories)/.test(k)).forEach((k) => localStorage.removeItem(k)); } catch (e) {}
   location.href = '/login/';
 }
 
